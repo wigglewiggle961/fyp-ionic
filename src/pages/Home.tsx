@@ -2,15 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { 
   IonContent, IonPage, IonCard, IonGrid, IonRow, IonCol, 
   IonIcon, IonText, IonHeader, IonToolbar, IonTitle, 
-  IonToggle, IonItem, IonLabel, IonButton, IonButtons 
+  IonToggle, IonItem, IonLabel, IonButton, IonButtons, 
+  IonDatetime,
+  IonSelect,
+  IonSelectOption,
+  useIonToast
 } from '@ionic/react';
 import { 
   heart, pulse, speedometer, bluetooth, 
-  analytics, listOutline, stopCircleOutline, playCircleOutline 
+  analytics, listOutline, stopCircleOutline, playCircleOutline, 
+  musicalNotesOutline,
+  alarmOutline
 } from 'ionicons/icons';
 import './Home.css'; 
 import { useRingData } from '../services/RingDataProvider';
+import { AlarmService } from '../services/AlarmService';
 
+const alarmService = new AlarmService();
 
 const Home: React.FC = () => {
   console.trace('Component Home mounted; calling useRingDataData');
@@ -32,11 +40,59 @@ const Home: React.FC = () => {
 
   // 2. New State for UI Mode (Wellness vs Science)
   const [isScientific, setIsScientific] = useState(false);
+  const [showToast] = useIonToast();
+  
+  // 3. Alarm State
+  const [alarmTime, setAlarmTime] = useState<string>(new Date().toISOString());
+  const [alarmSound, setAlarmSound] = useState<number>(1); // 1=Song1, 2=Song2, 0=Silent
 
   // Initialize on mount
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  const handleSetAlarm = async () => {
+      // 1. Request Permissions
+      const hasPermission = await alarmService.requestPermissions();
+      if (!hasPermission) {
+        showToast({ message: 'Permission required!', duration: 2000, color: 'warning' });
+        return;
+      }
+
+      // 2. Create Date objects
+      const pickerDate = new Date(alarmTime); // The time from the UI
+      let scheduleDate = new Date(); // Start with "Now"
+
+      // 3. Apply the HH:MM from the picker to "Today"
+      scheduleDate.setHours(pickerDate.getHours());
+      scheduleDate.setMinutes(pickerDate.getMinutes());
+      scheduleDate.setSeconds(0);
+      scheduleDate.setMilliseconds(0);
+
+      const now = new Date();
+
+      // --- THE CHANGE IS HERE ---
+      // If the constructed time is in the past...
+      if (scheduleDate.getTime() < now.getTime()) {
+        console.log('Time passed - firing immediately!');
+        // Set it to 1 second in the future so it triggers right away
+        scheduleDate = new Date(now.getTime() + 1000);
+      } 
+      // --------------------------
+
+      console.log('Scheduling for:', scheduleDate.toString());
+
+      // 4. Send to service
+      const success = await alarmService.setAlarm(scheduleDate, alarmSound);
+
+      if (success) {
+        showToast({
+          message: `Alarm set! ${scheduleDate.getTime() < now.getTime() + 2000 ? '(Running Immediately)' : 'for ' + scheduleDate.toLocaleTimeString()}`,
+          duration: 3000,
+          color: 'success'
+        });
+      }
+  };
 
   return (
     <IonPage>
@@ -133,6 +189,52 @@ const Home: React.FC = () => {
                 </IonRow>
             </IonGrid>
         </div>
+
+        <IonCard className="biometric-card" style={{ marginTop: 20, padding: 0 }}>
+          <div style={{ background: '#1e1e1e', padding: '15px', borderBottom: '1px solid #333' }}>
+            <IonText color="" style={{ display: 'flex', alignItems: 'center', fontSize: '1.1rem' }}>
+              <IonIcon icon={alarmOutline} style={{ marginRight: 10, color: '#FFD700' }} />
+              Smart Alarm
+            </IonText>
+          </div>
+          
+          <div style={{ padding: '15px' }}>
+            {/* Time Picker */}
+            <IonItem lines="none" style={{ '--background': 'transparent', marginBottom: '10px' }}>
+              <IonLabel position="stacked" color="medium">Wake Up Time</IonLabel>
+              <IonDatetime 
+                presentation="time" 
+                value={alarmTime} 
+                onIonChange={e => setAlarmTime(e.detail.value! as string)}
+                style={{ background: '#2a2a2a', borderRadius: '10px', marginTop: '5px', padding: '10px' }}
+              />
+            </IonItem>
+
+            {/* Sound Selector */}
+            <IonItem lines="none" style={{ '--background': 'transparent' }}>
+              <IonIcon icon={musicalNotesOutline} slot="start" color="medium" />
+              <IonLabel color="">Alarm Sound</IonLabel>
+              <IonSelect 
+                value={alarmSound} 
+                onIonChange={e => setAlarmSound(e.detail.value)}
+                interface="popover"
+                style={{ color: '#1DB954', fontWeight: 'bold' }}
+              >
+                <IonSelectOption value={1}>Song 1 (Energize)</IonSelectOption>
+                <IonSelectOption value={2}>Song 2 (Relax)</IonSelectOption>
+                <IonSelectOption value={0}>Silent (Vibrate)</IonSelectOption>
+              </IonSelect>
+            </IonItem>
+
+            <IonButton 
+              expand="block" 
+              onClick={handleSetAlarm} 
+              style={{ marginTop: '15px', '--background': '#FFD700', '--color': '#000' }}
+            >
+              Set Alarm
+            </IonButton>
+          </div>
+        </IonCard>
 
         {/* === SECTION 2: THE DATA FEED === */}
         <IonText color="medium" style={{ marginLeft: 16, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>

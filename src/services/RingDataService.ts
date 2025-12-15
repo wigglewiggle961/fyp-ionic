@@ -235,7 +235,7 @@ export const useRingDataCollector = () => {
   // Batching config
   const UPLOAD_BATCH_SIZE = 50;
   // using this for testing first
-  const API_BASE = "http://192.168.1.9:8000";
+  const API_BASE = "http://localhost:8000";
   const API_TOKEN = "";
   const uploadBufferRef = useRef<any[]>([]);
   const isUploadingRef = useRef(false);
