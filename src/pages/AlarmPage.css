@@ -1,0 +1,143 @@
+/* Alarm Page Styles */
+
+/* Base Gradient Background for the Page Content */
+.alarm-page-content {
+    --background: linear-gradient(180deg, #121212 0%, #0d0d0d 100%);
+}
+
+/* Header Gradient */
+.alarm-header-toolbar {
+    --background: transparent;
+    --color: #ffffff;
+    --padding-top: calc(40px + var(--ion-safe-area-top));
+    --min-height: calc(56px + 40px + var(--ion-safe-area-top));
+    /* Ensure toolbar grows */
+}
+
+/* The Main Hero Card */
+.alarm-hero-card {
+    background: linear-gradient(145deg, #1e1e1e 0%, #171717 100%);
+    border-radius: 32px;
+    padding: 30px 20px;
+    margin: 20px 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Subtle background glow in the card */
+.alarm-hero-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(29, 185, 84, 0.08) 0%, transparent 60%);
+    pointer-events: none;
+}
+
+.alarm-title {
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+
+/* Big Time Display */
+.alarm-time-display {
+    font-size: 64px;
+    font-weight: 200;
+    color: #ffffff;
+    margin: 10px 0;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+}
+
+.alarm-time-ampm {
+    font-size: 24px;
+    color: #666;
+    margin-left: 8px;
+}
+
+/* Window Info Chip */
+.window-chip {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(29, 185, 84, 0.1);
+    color: #1DB954;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 5px;
+}
+
+/* Controls Container */
+.alarm-controls {
+    margin-top: 40px;
+    text-align: left;
+}
+
+/* Label for inputs */
+.control-label {
+    font-size: 14px;
+    color: #B3B3B3;
+    margin-bottom: 12px;
+    display: block;
+    font-weight: 500;
+}
+
+/* Custom Range Slider Styling */
+ion-range {
+    --bar-background: #333;
+    --bar-background-active: #1DB954;
+    --knob-background: #fff;
+    --knob-size: 24px;
+    --knob-box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    padding-inline: 0;
+}
+
+/* Sound Selection Row */
+.sound-selector-row {
+    margin-top: 30px;
+}
+
+.sound-item {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+}
+
+.sound-item.active {
+    background: rgba(29, 185, 84, 0.15);
+    border: 1px solid rgba(29, 185, 84, 0.3);
+}
+
+/* Action Button */
+.set-alarm-btn {
+    margin: 30px 16px;
+    --background: #1DB954;
+    --background-hover: #1ed760;
+    --border-radius: 28px;
+    --color: #000;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    height: 56px;
+    font-size: 16px;
+    box-shadow: 0 4px 20px rgba(29, 185, 84, 0.3);
+}
+
+/* Modal/Picker override */
+ion-datetime {
+    border-radius: 20px;
+    --background: #1e1e1e;
+    --wheel-highlight-background: rgba(255, 255, 255, 0.05);
+}

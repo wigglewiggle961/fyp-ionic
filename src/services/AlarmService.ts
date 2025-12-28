@@ -13,9 +13,9 @@ export class AlarmService {
         {
           id: 'ALARM_ACTIONS',
           actions: [
-            { 
-              id: 'stop_alarm', 
-              title: 'STOP ALARM', 
+            {
+              id: 'stop_alarm',
+              title: 'STOP ALARM',
               foreground: true, // Opens the app when pressed
               destructive: true // Shows in red (on iOS/some Androids)
             }
@@ -30,12 +30,12 @@ export class AlarmService {
   async initializeChannels() {
     // Channel for Song 1
     await LocalNotifications.createChannel({
-        id: 'alarm_channel_song_1_v2', 
-        name: 'Alarm - Song 1',
-        importance: 5, 
-        visibility: 1,
-        sound: 'alarm', 
-        vibration: true
+      id: 'alarm_channel_song_1_v2',
+      name: 'Alarm - Song 1',
+      importance: 5,
+      visibility: 1,
+      sound: 'alarm',
+      vibration: true
     });
 
     // Channel for Song 2
@@ -49,30 +49,33 @@ export class AlarmService {
       vibration: true
     });
 
-    // Channel for Silent Alarm
+    // Channel for Song 3 (Birds)
     await LocalNotifications.createChannel({
-      id: 'alarm_channel_silent_v2',
-      name: 'Alarm - Silent',
-      description: 'Vibration only alarm',
+      id: 'alarm_channel_song_3_v2',
+      name: 'Alarm - Song 3',
+      description: 'Wake up to Birds',
       importance: 5,
       visibility: 1,
-      sound: '', // No sound
-      vibration: true,
-      lights: true
+      sound: 'alarm3', // Assuming 'alarm3.wav/mp3' exists in res/raw, otherwise fallbacks to default
+      vibration: true
     });
+
   }
 
   // 2. Schedule the Alarm
-  // soundChoice: 1 (Song 1), 2 (Song 2), or 0 (Silent)
+  // soundChoice: 1 (Song 1), 2 (Song 2), 3 (Birds)
   async setAlarm(triggerDate: Date, soundChoice: number) {
-    
+    await this.initializeChannels();
+
     // Determine which channel to use based on user choice
-    let selectedChannelId = 'alarm_channel_silent_v2'; // Default to silent
-    
+    let selectedChannelId = 'alarm_channel_song_1_v2';
+
     if (soundChoice === 1) {
       selectedChannelId = 'alarm_channel_song_1_v2';
     } else if (soundChoice === 2) {
       selectedChannelId = 'alarm_channel_song_2_v2';
+    } else if (soundChoice === 3) {
+      selectedChannelId = 'alarm_channel_song_3_v2';
     }
 
     const options: ScheduleOptions = {
@@ -81,17 +84,14 @@ export class AlarmService {
         title: 'Wake Up!',
         body: 'Time to get up!',
         actionTypeId: 'ALARM_ACTIONS',
-        schedule: { 
-          at: triggerDate, 
-          allowWhileIdle: true 
+        schedule: {
+          at: triggerDate,
+          allowWhileIdle: true
         },
         channelId: selectedChannelId,
         smallIcon: 'ic_stat_alarm',
         ongoing: true,
-        
-        extra: {
-           vibrationPattern: [0, 1000, 500, 2000] 
-        }
+
       }]
     };
 
@@ -113,11 +113,11 @@ export class AlarmService {
     }
   }
 
-    async requestPermissions() {
-        const result = await LocalNotifications.requestPermissions();
-        if (result.display === 'granted') {
-            return true
-        }
+  async requestPermissions() {
+    const result = await LocalNotifications.requestPermissions();
+    if (result.display === 'granted') {
+      return true
     }
+  }
 
 }

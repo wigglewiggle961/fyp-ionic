@@ -3,7 +3,7 @@ import { BluetoothLe, BleClient } from '@capacitor-community/bluetooth-le';
 import Papa from 'papaparse';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
-import{
+import {
   ForegroundService,
   ServiceType,
   Importance
@@ -18,7 +18,7 @@ const RXTX_NOTIFY_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 const MAIN_SERVICE_UUID = 'de5bf728-d711-4e47-af26-65e3012a5dc7';
 const MAIN_NOTIFY_UUID = 'de5bf729-d711-4e47-af26-65e3012a5dc7';
 
-const MERGE_WINDOW_MS = 150; 
+const MERGE_WINDOW_MS = 150;
 
 interface RingRecord {
   timestamp: number;
@@ -241,7 +241,7 @@ export const useRingDataCollector = () => {
   const isUploadingRef = useRef(false);
 
   const pendingRecordRef = useRef<RingRecord | null>(null);
-  
+
   // Keep listener handles so we can remove them on stop/unmount
   const rxtxListenerRef = useRef<any>(null);
   const mainListenerRef = useRef<any>(null);
@@ -266,10 +266,16 @@ export const useRingDataCollector = () => {
   const initialize = useCallback(async () => {
     try {
       await BluetoothLe.initialize({ androidNeverForLocation: true });
+      console.log('BluetoothLe initialized');
     } catch (err) {
       setError(`Initialization error: ${String(err)}`);
     }
   }, []);
+
+  // Initialize on mount
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   const scanAndConnect = useCallback(async () => {
     try {
@@ -329,7 +335,7 @@ export const useRingDataCollector = () => {
     }
   }, []);
 
-  const sendBatchToServer = async(deviceIdForBatch: string | null, labelForBatch: string | null, records: any[])=>{
+  const sendBatchToServer = async (deviceIdForBatch: string | null, labelForBatch: string | null, records: any[]) => {
     if (!records || records.length === 0) return true;
     const payload = {
       device_id: deviceIdForBatch ?? deviceId ?? 'unknown',
@@ -352,7 +358,7 @@ export const useRingDataCollector = () => {
       }))
     };
 
-    try{
+    try {
       const res = await fetch(`${API_BASE}/api/v1/data`, {
         method: 'POST',
         headers: {
@@ -362,14 +368,14 @@ export const useRingDataCollector = () => {
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const txt = await res.text().catch(()=>'<no body>');
+        const txt = await res.text().catch(() => '<no body>');
         console.warn('Batch upload server error', res.status, txt);
         return false;
       }
       console.log('Batch uploaded:', records.length);
       return true;
-    }catch(e){
-      console.warn("Batch upload failed bruh:",e);
+    } catch (e) {
+      console.warn("Batch upload failed bruh:", e);
       return false;
     }
   }
@@ -378,7 +384,7 @@ export const useRingDataCollector = () => {
     uploadBufferRef.current.push(entry);
     setData(prev => {
       const next = [...prev, entry];
-      if(next.length > 10) return next.slice(next.length - 10);
+      if (next.length > 10) return next.slice(next.length - 10);
       return next;
     });
   };
@@ -431,7 +437,7 @@ export const useRingDataCollector = () => {
       // 1. No record exists.
       // 2. The time gap between now and the record start is too large.
       // 3. The current record ALREADY has data for this subtype (data collision).
-      
+
       const isTimeGap = current && (now - current.timestamp > MERGE_WINDOW_MS);
       let isDuplicateType = false;
 
@@ -479,7 +485,7 @@ export const useRingDataCollector = () => {
         if (valZ & 0x0800) valZ -= 0x1000;
         current.accZ = valZ;
       }
-      
+
       // Note: We do NOT commit here. We wait for the next packet or stop command to commit.
       // This allows SpO2, PPG, and Accel arriving within 150ms to populate the same object.
 
@@ -525,7 +531,7 @@ export const useRingDataCollector = () => {
 
         console.log('Adding listeners? alreadyAdded =', listenersAddedRef.current);
 
-        if(!listenersAddedRef.current){
+        if (!listenersAddedRef.current) {
           listenersAddedRef.current = true;
 
           rxtxListenerRef.current = await BluetoothLe.addListener(rxtxListenerKey, (result: any) => {
@@ -551,11 +557,11 @@ export const useRingDataCollector = () => {
             const dataView = normalizeResultValueToDataView(result.value);
             handleNotification(dataView, label);
           });
-        }else{
+        } else {
           console.log('Listeners alrerady added.');
         }
 
-        
+
 
         // Start notifications (only after listeners registered
         console.info('Starting notifications...');
@@ -694,10 +700,10 @@ export const useRingDataCollector = () => {
       // Clear device state
       setDeviceId(null);
       setIsCollecting(false);
-      
+
       // Ensure foreground service is stopped
       await ensureForegroundServiceStopped();
-      
+
     } catch (err) {
       setError(`Disconnect error: ${String(err)}`);
       console.error('Disconnect error:', err);
@@ -786,28 +792,28 @@ export const useRingDataCollector = () => {
       console.info('Periodic collection not running');
       return;
     }
-    
+
     periodicRunningRef.current = false;
     if (periodicTimerRef.current !== null) {
       clearInterval(periodicTimerRef.current);
       periodicTimerRef.current = null;
     }
-    
+
     // Stop any active collection
     if (isCollecting) {
       await stopDataCollection();
     }
-    
+
     // Stop foreground service
     await ensureForegroundServiceStopped();
-    
+
     console.info('Periodic collection stopped (device still connected)');
   }, [isCollecting, stopDataCollection]);
 
   useEffect(() => {
     return () => {
       console.log('Component unmounting - full cleanup');
-      
+
       // Stop periodic timer synchronously
       if (periodicTimerRef.current !== null) {
         clearInterval(periodicTimerRef.current);

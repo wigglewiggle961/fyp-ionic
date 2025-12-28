@@ -1,349 +1,70 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  IonContent, IonPage, IonCard, IonGrid, IonRow, IonCol, 
-  IonIcon, IonText, IonHeader, IonToolbar, IonTitle, 
-  IonToggle, IonItem, IonLabel, IonButton, IonButtons, 
-  IonDatetime,
-  IonSelect,
-  IonSelectOption,
-  useIonToast
+import React from 'react';
+import {
+  IonContent, IonPage, IonCard, IonGrid, IonRow, IonCol,
+  IonIcon, IonHeader, IonToolbar, IonTitle
 } from '@ionic/react';
-import { 
-  heart, pulse, speedometer, bluetooth, 
-  analytics, listOutline, stopCircleOutline, playCircleOutline, 
-  musicalNotesOutline,
-  alarmOutline
-} from 'ionicons/icons';
-import './Home.css'; 
-import { useRingData } from '../services/RingDataProvider';
-import { AlarmService } from '../services/AlarmService';
-
-const alarmService = new AlarmService();
+import { moon, batteryHalf, time, rainy } from 'ionicons/icons';
 
 const Home: React.FC = () => {
-  console.trace('Component Home mounted; calling useRingDataData');
-  
-  // 1. Destructure your existing logic
-  const { 
-    initialize, 
-    scanAndConnect, 
-    startDataCollection, 
-    stopDataCollection, 
-    disconnectDevice,
-    startPeriodicCollection,
-    stopPeriodicCollection,
-    isCollecting, 
-    data, 
-    error,
-    deviceId
-  } = useRingData();
-
-  // 2. New State for UI Mode (Wellness vs Science)
-  const [isScientific, setIsScientific] = useState(false);
-  const [showToast] = useIonToast();
-  
-  // 3. Alarm State
-  const [alarmTime, setAlarmTime] = useState<string>(new Date().toISOString());
-  const [alarmSound, setAlarmSound] = useState<number>(1); // 1=Song1, 2=Song2, 0=Silent
-
-  // Initialize on mount
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
-
-  const handleSetAlarm = async () => {
-      // 1. Request Permissions
-      const hasPermission = await alarmService.requestPermissions();
-      if (!hasPermission) {
-        showToast({ message: 'Permission required!', duration: 2000, color: 'warning' });
-        return;
-      }
-
-      // 2. Create Date objects
-      const pickerDate = new Date(alarmTime); // The time from the UI
-      let scheduleDate = new Date(); // Start with "Now"
-
-      // 3. Apply the HH:MM from the picker to "Today"
-      scheduleDate.setHours(pickerDate.getHours());
-      scheduleDate.setMinutes(pickerDate.getMinutes());
-      scheduleDate.setSeconds(0);
-      scheduleDate.setMilliseconds(0);
-
-      const now = new Date();
-
-      // --- THE CHANGE IS HERE ---
-      // If the constructed time is in the past...
-      if (scheduleDate.getTime() < now.getTime()) {
-        console.log('Time passed - firing immediately!');
-        // Set it to 1 second in the future so it triggers right away
-        scheduleDate = new Date(now.getTime() + 1000);
-      } 
-      // --------------------------
-
-      console.log('Scheduling for:', scheduleDate.toString());
-
-      // 4. Send to service
-      const success = await alarmService.setAlarm(scheduleDate, alarmSound);
-
-      if (success) {
-        showToast({
-          message: `Alarm set! ${scheduleDate.getTime() < now.getTime() + 2000 ? '(Running Immediately)' : 'for ' + scheduleDate.toLocaleTimeString()}`,
-          duration: 3000,
-          color: 'success'
-        });
-      }
-  };
-
   return (
     <IonPage>
-      {/* HEADER: Dark with Teal Toggle */}
       <IonHeader className="ion-no-border">
-        <IonToolbar style={{ '--background': '#121212', '--color': '#fff' }}>
-          <IonTitle>Ring Data</IonTitle>
-          <IonButtons slot="end">
-            <IonItem lines="none" style={{ '--background': 'transparent', '--color': '#fff' }}>
-              <IonLabel style={{ fontSize: '0.7rem', color: '#B3B3B3', marginRight: 10 }}>
-                {isScientific ? 'DEV MODE' : 'WELLNESS'}
-              </IonLabel>
-              <IonToggle 
-                checked={isScientific} 
-                onIonChange={e => setIsScientific(e.detail.checked)}
-                style={{ '--handle-background-checked': '#1DB954' }}
-              />
-            </IonItem>
-          </IonButtons>
+        <IonToolbar style={{ '--background': '#121212', '--color': '#fff', '--padding-top': 'calc(40px + var(--ion-safe-area-top))', '--min-height': 'calc(56px + 40px + var(--ion-safe-area-top))' }}>
+          <IonTitle>Dashboard</IonTitle>
         </IonToolbar>
       </IonHeader>
 
       <IonContent fullscreen className="ion-padding">
-        
-        {/* === SECTION 1: STATUS & CONTROLS === */}
-        <div className="control-panel">
-            {/* Status Badges */}
-            <div style={{ marginBottom: 16 }}>
-                <span className={`status-badge ${deviceId ? 'active' : ''}`}>
-                    <IonIcon icon={bluetooth} style={{verticalAlign: 'middle', marginRight: 4}}/>
-                    {deviceId ? 'Connected' : 'Disconnected'}
-                </span>
-                <span className={`status-badge ${isCollecting ? 'active' : ''}`}>
-                    {isCollecting ? 'Collecting Data' : 'Idle'}
-                </span>
-                <span className="status-badge">
-                    Points: {data.length}
-                </span>
+        <h1 style={{ color: '#fff', marginLeft: 10, fontWeight: 300 }}>Good Morning, <br /><span style={{ fontWeight: 700 }}>Eric</span></h1>
+
+        {/* Main Sleep Score Card */}
+        <IonCard style={{ background: 'linear-gradient(135deg, #1e1e1e 0%, #252525 100%)', padding: '24px', borderRadius: '24px', margin: '16px 8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ color: '#888', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' }}>Sleep Score</div>
+              <div style={{ fontSize: '48px', fontWeight: 'bold', color: '#1DB954' }}>85</div>
+              <div style={{ color: '#ccc', fontSize: '14px' }}>Optimal</div>
             </div>
-
-            {/* Error Message Display */}
-            {error && (
-               <div style={{ color: '#ff4d4d', fontSize: '12px', marginBottom: 10, background: 'rgba(255,0,0,0.1)', padding: 8, borderRadius: 8 }}>
-                  Error: {error}
-               </div>
-            )}
-
-            {/* Connection Button */}
-            <IonButton 
-                onClick={scanAndConnect} 
-                disabled={!!deviceId}
-                expand="block"
-                color={deviceId ? "medium" : "success"}
-                className="ion-margin-bottom"
-            >
-                {deviceId ? 'Device Linked' : 'Scan & Connect'}
-            </IonButton>
-            
-            {/* Action Grid */}
-            <IonGrid style={{ padding: 0 }}>
-                <IonRow>
-                    <IonCol>
-                        <IonButton 
-                            onClick={() => startDataCollection(60, 'walking')} 
-                            disabled={!deviceId || isCollecting}
-                            expand="block" size="small" fill="outline" 
-                        >
-                            <IonIcon icon={playCircleOutline} slot="start" />
-                            60s Test
-                        </IonButton>
-                    </IonCol>
-                    <IonCol>
-                         <IonButton 
-                            onClick={() => startPeriodicCollection(1,10, 'walking',false)} 
-                            disabled={!deviceId || isCollecting}
-                            expand="block" size="small" fill="outline" 
-                        >
-                            <IonIcon icon={listOutline} slot="start" />
-                            Periodic
-                        </IonButton>
-                    </IonCol>
-                </IonRow>
-                <IonRow>
-                    <IonCol>
-                         <IonButton 
-                            onClick={stopDataCollection} 
-                            disabled={!isCollecting}
-                            expand="block" size="small" color="danger"
-                        >
-                            <IonIcon icon={stopCircleOutline} slot="start" />
-                            Stop All
-                        </IonButton>
-                    </IonCol>
-                </IonRow>
-            </IonGrid>
-        </div>
-
-        <IonCard className="biometric-card" style={{ marginTop: 20, padding: 0 }}>
-          <div style={{ background: '#1e1e1e', padding: '15px', borderBottom: '1px solid #333' }}>
-            <IonText color="" style={{ display: 'flex', alignItems: 'center', fontSize: '1.1rem' }}>
-              <IonIcon icon={alarmOutline} style={{ marginRight: 10, color: '#FFD700' }} />
-              Smart Alarm
-            </IonText>
+            <div style={{ width: 60, height: 60, borderRadius: 30, background: '#1DB954', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <IonIcon icon={moon} style={{ fontSize: '32px', color: '#000' }} />
+            </div>
           </div>
-          
-          <div style={{ padding: '15px' }}>
-            {/* Time Picker */}
-            <IonItem lines="none" style={{ '--background': 'transparent', marginBottom: '10px' }}>
-              <IonLabel position="stacked" color="medium">Wake Up Time</IonLabel>
-              <IonDatetime 
-                presentation="time" 
-                value={alarmTime} 
-                onIonChange={e => setAlarmTime(e.detail.value! as string)}
-                style={{ background: '#2a2a2a', borderRadius: '10px', marginTop: '5px', padding: '10px' }}
-              />
-            </IonItem>
 
-            {/* Sound Selector */}
-            <IonItem lines="none" style={{ '--background': 'transparent' }}>
-              <IonIcon icon={musicalNotesOutline} slot="start" color="medium" />
-              <IonLabel color="">Alarm Sound</IonLabel>
-              <IonSelect 
-                value={alarmSound} 
-                onIonChange={e => setAlarmSound(e.detail.value)}
-                interface="popover"
-                style={{ color: '#1DB954', fontWeight: 'bold' }}
-              >
-                <IonSelectOption value={1}>Song 1 (Energize)</IonSelectOption>
-                <IonSelectOption value={2}>Song 2 (Relax)</IonSelectOption>
-                <IonSelectOption value={0}>Silent (Vibrate)</IonSelectOption>
-              </IonSelect>
-            </IonItem>
-
-            <IonButton 
-              expand="block" 
-              onClick={handleSetAlarm} 
-              style={{ marginTop: '15px', '--background': '#FFD700', '--color': '#000' }}
-            >
-              Set Alarm
-            </IonButton>
+          <div style={{ marginTop: 24, display: 'flex', gap: 10 }}>
+            <span className="status-badge" style={{ background: '#333', color: '#fff' }}>7h 12m Sleep</span>
+            <span className="status-badge" style={{ background: '#333', color: '#fff' }}>94% Eff</span>
           </div>
         </IonCard>
 
-        {/* === SECTION 2: THE DATA FEED === */}
-        <IonText color="medium" style={{ marginLeft: 16, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            Live Feed
-        </IonText>
+        <IonGrid style={{ padding: '0 8px' }}>
+          <IonRow>
+            <IonCol size="6">
+              <IonCard style={{ margin: 0, padding: 16, background: '#1e1e1e', borderRadius: 16, height: '100%' }}>
+                <IonIcon icon={batteryHalf} style={{ color: '#50c8ff', fontSize: 24 }} />
+                <div style={{ marginTop: 10, color: '#888', fontSize: 12 }}>Readiness</div>
+                <div style={{ fontSize: 24, fontWeight: 'bold' }}>High</div>
+              </IonCard>
+            </IonCol>
+            <IonCol size="6">
+              <IonCard style={{ margin: 0, padding: 16, background: '#1e1e1e', borderRadius: 16, height: '100%' }}>
+                <IonIcon icon={rainy} style={{ color: '#fff', fontSize: 24 }} />
+                <div style={{ marginTop: 10, color: '#888', fontSize: 12 }}>Weather</div>
+                <div style={{ fontSize: 24, fontWeight: 'bold' }}>22°C</div>
+              </IonCard>
+            </IonCol>
+          </IonRow>
+        </IonGrid>
 
-        {data.slice(-10).reverse().map((entry: { hr: any; timestamp:  string; spo2: any; accX: number; accY: number; accZ: number; }, index: React.Key | null | undefined) => (
-          <IonCard key={entry.timestamp} className="biometric-card">
-            
-            {/* --- MODE A: WELLNESS COMPANION --- */}
-            {!isScientific && (
-              <>
-                <div className="hero-section">
-                  <div className="hero-icon">
-                    <IonIcon icon={heart} />
-                  </div>
-                  <div>
-                    <div className="hero-label">Heart Rate</div>
-                    <div className="hero-value">
-                      {entry.hr || '--'} <span style={{fontSize: '16px', color:'#555'}}>BPM</span>
-                    </div>
-                  </div>
-                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                     <IonText color="medium" style={{ fontSize: '12px' }}>
-                       {new Date(entry.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}
-                     </IonText>
-                  </div>
-                </div>
-
-                <IonGrid className="secondary-grid">
-                  <IonRow>
-                    <IonCol size="6">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <IonIcon icon={pulse} style={{ color: '#B3B3B3' }} />
-                        <div>
-                          <div style={{ fontSize: '11px', color: '#B3B3B3' }}>SpO2</div>
-                          <div style={{ fontWeight: '600', color: '#fff' }}>{entry.spo2 || '--'}%</div>
-                        </div>
-                      </div>
-                    </IonCol>
-                    <IonCol size="6">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <IonIcon icon={speedometer} style={{ color: '#B3B3B3' }} />
-                        <div>
-                          <div style={{ fontSize: '11px', color: '#B3B3B3' }}>Motion</div>
-                          <div style={{ fontWeight: '600', color: '#fff' }}>
-                             {/* Simple logic: if AccX/Y is high, assume active */}
-                             {(Math.abs(entry.accX || 0) > 1.2 || Math.abs(entry.accY || 0) > 1.2) ? 'Active' : 'Steady'}
-                          </div>
-                        </div>
-                      </div>
-                    </IonCol>
-                  </IonRow>
-                </IonGrid>
-              </>
-            )}
-
-            {/* --- MODE B: SCIENTIFIC INSTRUMENT --- */}
-            {isScientific && (
-              <>
-                <div className="science-header">
-                    <div>
-                        <IonIcon icon={analytics} style={{ marginRight: '8px', color: 'var(--accent-teal)' }} />
-                        <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: '#fff' }}>DATA_POINT</span>
-                    </div>
-                    <span style={{ fontFamily: 'monospace', color: '#666', fontSize: '12px' }}>
-                        {new Date(entry.timestamp).toISOString().split('T')[1].split('.')[0]}
-                    </span>
-                </div>
-
-                <div className="science-row">
-                    <span className="science-label">HR_RAW</span>
-                    <span>{entry.hr || 'NULL'}</span>
-                </div>
-                <div className="science-row">
-                    <span className="science-label">OXYGEN</span>
-                    <span>{entry.spo2 || 'NULL'} %</span>
-                </div>
-                <div className="science-row">
-                    <span className="science-label">ACCEL_X</span>
-                    <span>{entry.accX?.toFixed(4) || '0.0000'}</span>
-                </div>
-                <div className="science-row">
-                    <span className="science-label">ACCEL_Y</span>
-                    <span>{entry.accY?.toFixed(4) || '0.0000'}</span>
-                </div>
-                <div className="science-row">
-                    <span className="science-label">ACCEL_Z</span>
-                    <span>{entry.accZ?.toFixed(4) || '0.0000'}</span>
-                </div>
-                
-                {/* Note: In scientific mode, we show the raw entry JSON properly formatted */}
-                <div style={{ background: '#000', padding: '10px', marginTop: '5px', overflowX: 'auto' }}>
-                    <pre style={{ color: '#00ff00', fontSize: '10px', margin: 0 }}>
-                        {JSON.stringify(entry, null, 2)}
-                    </pre>
-                </div>
-              </>
-            )}
-
-          </IonCard>
-        ))}
-        
-        {data.length === 0 && (
-            <div style={{ textAlign: 'center', marginTop: '50px', color: '#333' }}>
-                <IonIcon icon={listOutline} style={{ fontSize: '48px', opacity: 0.2 }} />
-                <p>No data collected yet</p>
+        <div style={{ padding: '20px 10px' }}>
+          <h3 style={{ color: '#fff', fontSize: 18 }}>Tonight</h3>
+          <IonCard style={{ margin: '10px 0', padding: 16, background: '#1e1e1e', borderRadius: 16, display: 'flex', alignItems: 'center' }}>
+            <IonIcon icon={time} style={{ color: '#ffd534', fontSize: 24, marginRight: 16 }} />
+            <div>
+              <div style={{ color: '#fff', fontWeight: 'bold' }}>Bedtime Window</div>
+              <div style={{ color: '#888', fontSize: 12 }}>10:45 PM - 11:30 PM</div>
             </div>
-        )}
+          </IonCard>
+        </div>
 
       </IonContent>
     </IonPage>
