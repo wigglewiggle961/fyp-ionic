@@ -1,71 +1,337 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   IonContent, IonPage, IonCard, IonGrid, IonRow, IonCol,
-  IonIcon, IonHeader, IonToolbar, IonTitle
+  IonIcon, IonHeader, IonToolbar, IonTitle, IonSelect, IonSelectOption,
+  IonSpinner, IonRefresher, IonRefresherContent
 } from '@ionic/react';
-import { moon, batteryHalf, time, rainy } from 'ionicons/icons';
+import { moon, sparkles, analytics, trendingUp, informationCircleOutline } from 'ionicons/icons';
+import { useRingData } from '../services/RingDataProvider';
+import { SleepAPI, Session, SessionDetail } from '../services/SleepAPI';
+import HypnogramChart from '../components/HypnogramChart';
+import SleepStageDonut, { StageLabels } from '../components/SleepStageDonut';
+import FeatureExplainer from '../components/FeatureExplainer';
 
 const Home: React.FC = () => {
+  const { deviceId } = useRingData();
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Load sessions when device is connected
+  useEffect(() => {
+    if (deviceId) {
+      loadSessions();
+    }
+  }, [deviceId]);
+
+  // Load session detail when selection changes
+  useEffect(() => {
+    if (deviceId && selectedSessionId) {
+      loadSessionDetail(selectedSessionId);
+    }
+  }, [selectedSessionId]);
+
+  const loadSessions = async () => {
+    if (!deviceId) return;
+    setLoading(true);
+    const data = await SleepAPI.getSessions(deviceId);
+    setSessions(data);
+    if (data.length > 0 && !selectedSessionId) {
+      setSelectedSessionId(data[0].session_id);
+    }
+    setLoading(false);
+  };
+
+  const loadSessionDetail = async (sessionId: string) => {
+    if (!deviceId) return;
+    setLoading(true);
+    const detail = await SleepAPI.getSessionDetail(deviceId, sessionId);
+    setSessionDetail(detail);
+    setLoading(false);
+  };
+
+  const handleRefresh = async (event: CustomEvent) => {
+    await loadSessions();
+    if (selectedSessionId) {
+      await loadSessionDetail(selectedSessionId);
+    }
+    event.detail.complete();
+  };
+
+  const formatSessionLabel = (session: Session) => {
+    const start = new Date(session.start_time);
+    return start.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const summary = sessionDetail?.summary;
+  const sleepScore = summary?.sleep_score || 0;
+  const scoreColor = sleepScore >= 80 ? '#1DB954' : sleepScore >= 60 ? '#ffc107' : '#ff6b6b';
+
   return (
     <IonPage>
       <IonHeader className="ion-no-border">
-        <IonToolbar style={{ '--background': '#121212', '--color': '#fff', '--padding-top': 'calc(40px + var(--ion-safe-area-top))', '--min-height': 'calc(56px + 40px + var(--ion-safe-area-top))' }}>
+        <IonToolbar style={{
+          '--background': '#121212',
+          '--color': '#fff',
+          '--padding-top': 'calc(40px + var(--ion-safe-area-top))',
+          '--min-height': 'calc(56px + 40px + var(--ion-safe-area-top))'
+        }}>
           <IonTitle>Dashboard</IonTitle>
         </IonToolbar>
       </IonHeader>
 
-      <IonContent fullscreen className="ion-padding">
-        <h1 style={{ color: '#fff', marginLeft: 10, fontWeight: 300 }}>Good Morning, <br /><span style={{ fontWeight: 700 }}>Eric</span></h1>
+      <IonContent fullscreen style={{ '--background': '#121212' }}>
+        <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
+          <IonRefresherContent />
+        </IonRefresher>
 
-        {/* Main Sleep Score Card */}
-        <IonCard style={{ background: 'linear-gradient(135deg, #1e1e1e 0%, #252525 100%)', padding: '24px', borderRadius: '24px', margin: '16px 8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ color: '#888', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' }}>Sleep Score</div>
-              <div style={{ fontSize: '48px', fontWeight: 'bold', color: '#1DB954' }}>85</div>
-              <div style={{ color: '#ccc', fontSize: '14px' }}>Optimal</div>
+        <div className="ion-padding">
+          {/* Session Selector */}
+          {sessions.length > 0 && (
+            <IonCard style={{
+              background: '#1a1a1a',
+              borderRadius: 12,
+              margin: '0 0 16px',
+              padding: '8px 16px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <IonIcon icon={moon} style={{ color: '#1DB954', fontSize: 20 }} />
+                <IonSelect
+                  value={selectedSessionId}
+                  onIonChange={e => setSelectedSessionId(e.detail.value)}
+                  interface="action-sheet"
+                  style={{ flex: 1, color: '#fff' }}
+                  placeholder="Select Session"
+                >
+                  {sessions.map(s => (
+                    <IonSelectOption key={s.session_id} value={s.session_id}>
+                      {formatSessionLabel(s)} ({s.duration_hours}h)
+                    </IonSelectOption>
+                  ))}
+                </IonSelect>
+              </div>
+            </IonCard>
+          )}
+
+          {loading && (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <IonSpinner color="primary" />
             </div>
-            <div style={{ width: 60, height: 60, borderRadius: 30, background: '#1DB954', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <IonIcon icon={moon} style={{ fontSize: '32px', color: '#000' }} />
-            </div>
-          </div>
+          )}
 
-          <div style={{ marginTop: 24, display: 'flex', gap: 10 }}>
-            <span className="status-badge" style={{ background: '#333', color: '#fff' }}>7h 12m Sleep</span>
-            <span className="status-badge" style={{ background: '#333', color: '#fff' }}>94% Eff</span>
-          </div>
-        </IonCard>
+          {!loading && !deviceId && (
+            <IonCard style={{
+              background: 'linear-gradient(135deg, #1e1e1e 0%, #252525 100%)',
+              padding: 24,
+              borderRadius: 24,
+              textAlign: 'center'
+            }}>
+              <IonIcon icon={moon} style={{ fontSize: 48, color: '#1DB954', marginBottom: 16 }} />
+              <h2 style={{ color: '#fff', margin: '0 0 8px' }}>Connect Your Ring</h2>
+              <p style={{ color: '#888', margin: 0 }}>
+                Go to the Recovery tab to connect your ring and start tracking sleep.
+              </p>
+            </IonCard>
+          )}
 
-        <IonGrid style={{ padding: '0 8px' }}>
-          <IonRow>
-            <IonCol size="6">
-              <IonCard style={{ margin: 0, padding: 16, background: '#1e1e1e', borderRadius: 16, height: '100%' }}>
-                <IonIcon icon={batteryHalf} style={{ color: '#50c8ff', fontSize: 24 }} />
-                <div style={{ marginTop: 10, color: '#888', fontSize: 12 }}>Readiness</div>
-                <div style={{ fontSize: 24, fontWeight: 'bold' }}>High</div>
+          {!loading && sessionDetail && summary && (
+            <>
+              {/* Sleep Score Card */}
+              <IonCard style={{
+                background: 'linear-gradient(135deg, #1e1e1e 0%, #252525 100%)',
+                padding: 24,
+                borderRadius: 24,
+                margin: '0 0 16px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{
+                      color: '#888',
+                      textTransform: 'uppercase',
+                      fontSize: 12,
+                      letterSpacing: '1px'
+                    }}>Sleep Score</div>
+                    <div style={{ fontSize: 56, fontWeight: 'bold', color: scoreColor }}>
+                      {sleepScore}
+                    </div>
+                    <div style={{ color: '#ccc', fontSize: 14 }}>
+                      {sleepScore >= 80 ? 'Excellent' : sleepScore >= 60 ? 'Good' : 'Needs Improvement'}
+                    </div>
+                  </div>
+                  <div style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 32,
+                    background: scoreColor,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center'
+                  }}>
+                    <IonIcon icon={sparkles} style={{ fontSize: 32, color: '#000' }} />
+                  </div>
+                </div>
+
+                <div style={{
+                  marginTop: 20,
+                  display: 'flex',
+                  gap: 10,
+                  flexWrap: 'wrap'
+                }}>
+                  <span style={{
+                    background: '#333',
+                    color: '#fff',
+                    padding: '6px 12px',
+                    borderRadius: 16,
+                    fontSize: 13
+                  }}>
+                    {Math.floor(summary.total_duration_min / 60)}h {Math.round(summary.total_duration_min % 60)}m Total
+                  </span>
+                  <span style={{
+                    background: '#333',
+                    color: '#fff',
+                    padding: '6px 12px',
+                    borderRadius: 16,
+                    fontSize: 13
+                  }}>
+                    {summary.sleep_efficiency}% Efficiency
+                  </span>
+                </div>
               </IonCard>
-            </IonCol>
-            <IonCol size="6">
-              <IonCard style={{ margin: 0, padding: 16, background: '#1e1e1e', borderRadius: 16, height: '100%' }}>
-                <IonIcon icon={rainy} style={{ color: '#fff', fontSize: 24 }} />
-                <div style={{ marginTop: 10, color: '#888', fontSize: 12 }}>Weather</div>
-                <div style={{ fontSize: 24, fontWeight: 'bold' }}>22°C</div>
-              </IonCard>
-            </IonCol>
-          </IonRow>
-        </IonGrid>
 
-        <div style={{ padding: '20px 10px' }}>
-          <h3 style={{ color: '#fff', fontSize: 18 }}>Tonight</h3>
-          <IonCard style={{ margin: '10px 0', padding: 16, background: '#1e1e1e', borderRadius: 16, display: 'flex', alignItems: 'center' }}>
-            <IonIcon icon={time} style={{ color: '#ffd534', fontSize: 24, marginRight: 16 }} />
-            <div>
-              <div style={{ color: '#fff', fontWeight: 'bold' }}>Bedtime Window</div>
-              <div style={{ color: '#888', fontSize: 12 }}>10:45 PM - 11:30 PM</div>
-            </div>
-          </IonCard>
+              {/* Sleep Stage Breakdown */}
+              <IonCard style={{
+                background: '#1a1a1a',
+                padding: 20,
+                borderRadius: 20,
+                margin: '0 0 16px'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  marginBottom: 16
+                }}>
+                  <IonIcon icon={analytics} style={{ color: '#1DB954', marginRight: 8 }} />
+                  <span style={{
+                    color: '#fff',
+                    fontWeight: 600,
+                    fontSize: 14
+                  }}>Sleep Stages</span>
+                </div>
+
+                <SleepStageDonut
+                  wake={summary.wake_min}
+                  rem={summary.rem_min}
+                  light={summary.light_min}
+                  deep={summary.deep_min}
+                />
+                <StageLabels
+                  wake={summary.wake_min}
+                  rem={summary.rem_min}
+                  light={summary.light_min}
+                  deep={summary.deep_min}
+                />
+              </IonCard>
+
+              {/* Hypnogram */}
+              <IonCard style={{
+                background: '#1a1a1a',
+                padding: 20,
+                borderRadius: 20,
+                margin: '0 0 16px'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  marginBottom: 16
+                }}>
+                  <IonIcon icon={trendingUp} style={{ color: '#1DB954', marginRight: 8 }} />
+                  <span style={{
+                    color: '#fff',
+                    fontWeight: 600,
+                    fontSize: 14
+                  }}>Sleep Timeline</span>
+                </div>
+
+                <HypnogramChart predictions={sessionDetail.predictions} />
+              </IonCard>
+
+              {/* Feature Explainability */}
+              <IonCard style={{
+                background: '#1a1a1a',
+                padding: 20,
+                borderRadius: 20,
+                margin: '0 0 16px'
+              }}>
+                <FeatureExplainer
+                  features={sessionDetail.feature_explanations}
+                  title="How AI Analyzes Your Sleep"
+                />
+              </IonCard>
+
+              {/* Stats Grid */}
+              <IonGrid style={{ padding: 0, margin: '0 0 16px' }}>
+                <IonRow>
+                  <IonCol size="6">
+                    <IonCard style={{
+                      margin: 0,
+                      padding: 16,
+                      background: '#1a1a1a',
+                      borderRadius: 16
+                    }}>
+                      <div style={{
+                        color: '#22c55e',
+                        fontSize: 24,
+                        fontWeight: 'bold'
+                      }}>
+                        {Math.round(summary.deep_min)}m
+                      </div>
+                      <div style={{ color: '#888', fontSize: 12 }}>Deep Sleep</div>
+                    </IonCard>
+                  </IonCol>
+                  <IonCol size="6">
+                    <IonCard style={{
+                      margin: 0,
+                      padding: 16,
+                      background: '#1a1a1a',
+                      borderRadius: 16
+                    }}>
+                      <div style={{
+                        color: '#a855f7',
+                        fontSize: 24,
+                        fontWeight: 'bold'
+                      }}>
+                        {Math.round(summary.rem_min)}m
+                      </div>
+                      <div style={{ color: '#888', fontSize: 12 }}>REM Sleep</div>
+                    </IonCard>
+                  </IonCol>
+                </IonRow>
+              </IonGrid>
+            </>
+          )}
+
+          {!loading && deviceId && sessions.length === 0 && (
+            <IonCard style={{
+              background: '#1a1a1a',
+              padding: 24,
+              borderRadius: 20,
+              textAlign: 'center'
+            }}>
+              <IonIcon icon={moon} style={{ fontSize: 48, color: '#666', marginBottom: 16 }} />
+              <h3 style={{ color: '#fff', margin: '0 0 8px' }}>No Sleep Data Yet</h3>
+              <p style={{ color: '#888', margin: 0, fontSize: 14 }}>
+                Start monitoring your sleep from the Recovery tab to see insights here.
+              </p>
+            </IonCard>
+          )}
         </div>
-
       </IonContent>
     </IonPage>
   );
