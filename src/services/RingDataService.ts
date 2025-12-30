@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { BluetoothLe, BleClient } from '@capacitor-community/bluetooth-le';
+import { API_BASE } from '../config/api';
 import Papa from 'papaparse';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
@@ -239,8 +240,7 @@ export const useRingDataCollector = () => {
   const [error, setError] = useState<string | null>(null);
   // Batching config - smaller batches = faster HR chart updates
   const UPLOAD_BATCH_SIZE = 5;  // ~2 seconds of data at 3 samples/sec for frequent chart updates
-  // using this for testing first
-  const API_BASE = "http://192.168.1.9:8000";
+  // API_BASE is imported from '../config/api'
   const API_TOKEN = "";
   const uploadBufferRef = useRef<any[]>([]);
   const isUploadingRef = useRef(false);

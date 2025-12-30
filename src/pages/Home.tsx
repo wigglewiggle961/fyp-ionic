@@ -71,8 +71,9 @@ const Home: React.FC = () => {
   };
 
   const summary = sessionDetail?.summary;
-  const sleepScore = summary?.sleep_score || 0;
-  const scoreColor = sleepScore >= 80 ? '#1DB954' : sleepScore >= 60 ? '#ffc107' : '#ff6b6b';
+  // Sleep Efficiency coloring: >90 excellent, >80 good, <80 needs work
+  const efficiency = summary?.sleep_efficiency || 0;
+  const scoreColor = efficiency >= 90 ? '#1DB954' : efficiency >= 85 ? '#ffc107' : '#ff6b6b';
 
   return (
     <IonPage>
@@ -157,12 +158,12 @@ const Home: React.FC = () => {
                       textTransform: 'uppercase',
                       fontSize: 12,
                       letterSpacing: '1px'
-                    }}>Sleep Score</div>
+                    }}>Sleep Efficiency</div>
                     <div style={{ fontSize: 56, fontWeight: 'bold', color: scoreColor }}>
-                      {sleepScore}
+                      {summary.sleep_efficiency}%
                     </div>
                     <div style={{ color: '#ccc', fontSize: 14 }}>
-                      {sleepScore >= 80 ? 'Excellent' : sleepScore >= 60 ? 'Good' : 'Needs Improvement'}
+                      {summary.sleep_efficiency >= 90 ? 'High' : summary.sleep_efficiency >= 85 ? 'Normal' : 'Low'}
                     </div>
                   </div>
                   <div style={{
@@ -174,7 +175,8 @@ const Home: React.FC = () => {
                     justifyContent: 'center',
                     alignItems: 'center'
                   }}>
-                    <IonIcon icon={sparkles} style={{ fontSize: 32, color: '#000' }} />
+                    {/* Pie chart icon represents efficiency better */}
+                    <IonIcon icon={analytics} style={{ fontSize: 32, color: '#000' }} />
                   </div>
                 </div>
 
@@ -200,7 +202,7 @@ const Home: React.FC = () => {
                     borderRadius: 16,
                     fontSize: 13
                   }}>
-                    {summary.sleep_efficiency}% Efficiency
+                    {Math.floor((summary.rem_min + summary.deep_min) / 60)}h {(summary.rem_min + summary.deep_min) % 60}m Restorative
                   </span>
                 </div>
               </IonCard>

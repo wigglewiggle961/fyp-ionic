@@ -1,5 +1,7 @@
 // Sleep API Service - Fetches session data and insights from backend
-const API_BASE = 'http://192.168.1.9:8000/api/v1';
+import { API_BASE as BASE_URL } from '../config/api';
+
+const API_BASE = `${BASE_URL}/api/v1`;
 
 export interface Session {
     session_id: string;
