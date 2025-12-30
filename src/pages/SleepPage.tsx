@@ -2,21 +2,24 @@ import React, { useState } from 'react';
 import {
     IonContent, IonPage, IonHeader, IonToolbar, IonTitle,
     IonIcon, IonButton,
-    IonToggle, IonItem, IonLabel, IonButtons
+    IonToggle, IonItem, IonLabel, IonButtons,
+    IonCard, IonGrid, IonRow, IonCol, IonText
 } from '@ionic/react';
 import {
     heart, bluetooth,
     playCircleOutline, stopCircleOutline, listOutline,
-    waterOutline
+    waterOutline, pulse, speedometer, analytics
 } from 'ionicons/icons';
 import './SleepPage.css';
 import { useRingData } from '../services/RingDataProvider';
 import HeartRateChart from '../components/HeartRateChart';
+import PPGWaveformChart from '../components/PPGWaveformChart';
 
 const SleepPage: React.FC = () => {
     const {
         scanAndConnect, startDataCollection, stopDataCollection,
-        startPeriodicCollection, isCollecting, data,
+        startPeriodicCollection, stopPeriodicCollection,
+        isCollecting, isPeriodicRunning, currentHR, hrHistory, ppgHistory, data,
         error, deviceId
     } = useRingData();
 
@@ -24,7 +27,8 @@ const SleepPage: React.FC = () => {
 
     // Get latest reading or defaults
     const latest = data.length > 0 ? data[data.length - 1] : null;
-    const currentHr = latest?.hr || '--';
+    // Use currentHR from the HR calculator for live display
+    const displayHR = currentHR || latest?.hr || '--';
     const currentSpo2 = latest?.spo2 || '--';
 
     // Simple activity heuristic
@@ -57,10 +61,12 @@ const SleepPage: React.FC = () => {
                 <div className="connection-status-strip">
                     <div className={`status-dot ${deviceId ? 'connected' : ''}`} />
                     <span className="status-text">{deviceId ? 'Ring Connected' : 'Disconnected'}</span>
-                    {isCollecting && (
+                    {(isCollecting || isPeriodicRunning) && (
                         <>
                             <span style={{ margin: '0 8px', color: '#333' }}>|</span>
-                            <span className="status-text" style={{ color: '#1DB954' }}>Collecting</span>
+                            <span className="status-text" style={{ color: '#1DB954' }}>
+                                {isPeriodicRunning ? 'Monitoring' : 'Collecting'}
+                            </span>
                         </>
                     )}
                 </div>
@@ -79,16 +85,16 @@ const SleepPage: React.FC = () => {
                     </div>
 
                     <div className="main-metric-container">
-                        <IonIcon icon={heart} className={`heart-icon-large ${isCollecting ? 'pulse-animation' : ''}`} />
+                        <IonIcon icon={heart} className={`heart-icon-large ${isCollecting || isPeriodicRunning ? 'pulse-animation' : ''}`} />
                         <div>
-                            <span className="metric-value-large">{currentHr}</span>
+                            <span className="metric-value-large">{displayHR}</span>
                             <span className="metric-unit">BPM</span>
                         </div>
                     </div>
 
                     {/* CHART SECTION */}
                     <div style={{ height: '120px', margin: '20px -10px' }}>
-                        <HeartRateChart dataPoints={data} />
+                        <HeartRateChart dataPoints={hrHistory} />
                     </div>
 
                     <div className="secondary-metrics-row">
@@ -99,6 +105,17 @@ const SleepPage: React.FC = () => {
                         <div className="sec-metric">
                             <span className="sec-label">Motion</span>
                             <span className="sec-value">{isMoving ? 'Active' : 'Resting'}</span>
+                        </div>
+                    </div>
+
+                    {/* PPG WAVEFORM SECTION */}
+                    <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>PPG Waveform</span>
+                            <span style={{ fontSize: 10, color: '#555' }}>{ppgHistory.length} samples</span>
+                        </div>
+                        <div style={{ height: '80px', margin: '0 -10px' }}>
+                            <PPGWaveformChart dataPoints={ppgHistory} />
                         </div>
                     </div>
                 </div>
@@ -117,7 +134,6 @@ const SleepPage: React.FC = () => {
                     <div className="action-btn-row" style={{ marginTop: 12 }}>
                         <IonButton
                             className="control-btn"
-                            color="light"
                             fill="outline"
                             onClick={() => startDataCollection(60, 'walking')}
                             disabled={!deviceId || isCollecting}
@@ -129,7 +145,6 @@ const SleepPage: React.FC = () => {
 
                         <IonButton
                             className="control-btn"
-                            color="dark"
                             fill="outline"
                             style={{ flex: 1, '--border-color': 'rgba(255,255,255,0.2)', '--color': '#fff' }}
                             onClick={() => startPeriodicCollection(1, 10, 'walking', false)}
@@ -144,8 +159,16 @@ const SleepPage: React.FC = () => {
                         expand="block"
                         color="danger"
                         className="control-btn"
-                        onClick={stopDataCollection}
-                        disabled={!isCollecting}
+                        onClick={async () => {
+                            // Stop both periodic collection and current collection
+                            if (isPeriodicRunning) {
+                                await stopPeriodicCollection();
+                            }
+                            if (isCollecting) {
+                                await stopDataCollection();
+                            }
+                        }}
+                        disabled={!isCollecting && !isPeriodicRunning}
                         style={{ marginTop: 0 }}
                     >
                         <IonIcon icon={stopCircleOutline} style={{ marginRight: 8 }} />
@@ -158,36 +181,106 @@ const SleepPage: React.FC = () => {
 
                 <div className="data-feed-list">
                     {data.slice(-5).reverse().map((entry: any, i) => (
-                        <div key={i} className="feed-item">
-                            {!isScientific ? (
+                        <IonCard key={i} style={{ margin: '8px 0', background: 'rgba(30,30,30,0.9)', borderRadius: 12 }}>
+                            {/* --- MODE A: WELLNESS COMPANION --- */}
+                            {!isScientific && (
                                 <>
-                                    <div>
-                                        <div className="feed-time">
-                                            {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                    <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', gap: 12 }}>
+                                        <div style={{ fontSize: 28, color: '#ff4b4b' }}>
+                                            <IonIcon icon={heart} />
                                         </div>
-                                        <div style={{ fontSize: 11, color: '#444' }}>ID: {entry.seq || i}</div>
+                                        <div>
+                                            <div style={{ fontSize: 11, color: '#888' }}>Heart Rate</div>
+                                            <div style={{ fontSize: 24, fontWeight: 'bold', color: '#fff' }}>
+                                                {entry.hr || '--'} <span style={{ fontSize: 14, color: '#555' }}>BPM</span>
+                                            </div>
+                                        </div>
+                                        <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                                            <IonText color="medium" style={{ fontSize: 12 }}>
+                                                {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                            </IonText>
+                                        </div>
                                     </div>
-                                    <div className="feed-values">
-                                        <div className="feed-val">
-                                            <IonIcon icon={heart} style={{ color: '#ff4b4b', fontSize: 12 }} />
-                                            {entry.hr}
-                                        </div>
-                                        <div className="feed-val">
-                                            <IonIcon icon={waterOutline} style={{ color: '#50c8ff', fontSize: 12 }} />
-                                            {entry.spo2}
-                                        </div>
-                                    </div>
+
+                                    <IonGrid style={{ padding: '8px 16px 12px' }}>
+                                        <IonRow>
+                                            <IonCol size="6">
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <IonIcon icon={pulse} style={{ color: '#50c8ff', fontSize: 16 }} />
+                                                    <div>
+                                                        <div style={{ fontSize: 11, color: '#888' }}>SpO2</div>
+                                                        <div style={{ fontWeight: 600, color: '#fff' }}>{entry.spo2 || '--'}%</div>
+                                                    </div>
+                                                </div>
+                                            </IonCol>
+                                            <IonCol size="6">
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <IonIcon icon={speedometer} style={{ color: '#888', fontSize: 16 }} />
+                                                    <div>
+                                                        <div style={{ fontSize: 11, color: '#888' }}>Motion</div>
+                                                        <div style={{ fontWeight: 600, color: '#fff' }}>
+                                                            {(Math.abs(entry.accX || 0) > 1.2 || Math.abs(entry.accY || 0) > 1.2) ? 'Active' : 'Steady'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </IonCol>
+                                        </IonRow>
+                                    </IonGrid>
                                 </>
-                            ) : (
-                                <pre style={{ fontSize: 10, color: '#0f0', margin: 0, overflow: 'hidden' }}>
-                                    {JSON.stringify(entry, null, 0).substring(0, 40)}...
-                                </pre>
                             )}
-                        </div>
+
+                            {/* --- MODE B: SCIENTIFIC INSTRUMENT --- */}
+                            {isScientific && (
+                                <div style={{ padding: 12 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                        <div>
+                                            <IonIcon icon={analytics} style={{ marginRight: 8, color: '#00d9ff' }} />
+                                            <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: '#fff' }}>DATA_POINT</span>
+                                        </div>
+                                        <span style={{ fontFamily: 'monospace', color: '#666', fontSize: 12 }}>
+                                            {new Date(entry.timestamp).toISOString().split('T')[1].split('.')[0]}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #333' }}>
+                                            <span style={{ color: '#888' }}>HR_CALC</span>
+                                            <span style={{ color: '#0f0' }}>{entry.hr || 'NULL'}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #333' }}>
+                                            <span style={{ color: '#888' }}>PPG_RAW</span>
+                                            <span style={{ color: '#0f0' }}>{entry.ppg || 'NULL'}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #333' }}>
+                                            <span style={{ color: '#888' }}>OXYGEN</span>
+                                            <span style={{ color: '#0f0' }}>{entry.spo2 || 'NULL'} %</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #333' }}>
+                                            <span style={{ color: '#888' }}>ACCEL_X</span>
+                                            <span style={{ color: '#0f0' }}>{entry.accX?.toFixed(4) || '0.0000'}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #333' }}>
+                                            <span style={{ color: '#888' }}>ACCEL_Y</span>
+                                            <span style={{ color: '#0f0' }}>{entry.accY?.toFixed(4) || '0.0000'}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                                            <span style={{ color: '#888' }}>ACCEL_Z</span>
+                                            <span style={{ color: '#0f0' }}>{entry.accZ?.toFixed(4) || '0.0000'}</span>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ background: '#000', padding: 10, marginTop: 8, borderRadius: 4, overflowX: 'auto' }}>
+                                        <pre style={{ color: '#00ff00', fontSize: 9, margin: 0 }}>
+                                            {JSON.stringify(entry, null, 2)}
+                                        </pre>
+                                    </div>
+                                </div>
+                            )}
+                        </IonCard>
                     ))}
 
                     {data.length === 0 && (
-                        <div style={{ textAlign: 'center', color: '#333', padding: 20 }}>
+                        <div style={{ textAlign: 'center', color: '#555', padding: 20 }}>
                             <p style={{ fontSize: 13 }}>No data collected yet</p>
                         </div>
                     )}

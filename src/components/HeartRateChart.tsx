@@ -27,10 +27,13 @@ interface HeartRateChartProps {
 }
 
 const HeartRateChart: React.FC<HeartRateChartProps> = ({ dataPoints }) => {
+    // Debug: log when component receives new data
+    console.log('[HeartRateChart] Rendering with', dataPoints.length, 'points');
 
     const chartData = useMemo(() => {
-        // Take last 20 points for cleaner view, or all if less
+        // Take last 30 points for cleaner view
         const recent = dataPoints.slice(-30);
+        console.log('[HeartRateChart] Building chart data with', recent.length, 'points');
 
         return {
             labels: recent.map(p => new Date(p.timestamp).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })),
@@ -47,18 +50,29 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({ dataPoints }) => {
                         return gradient;
                     },
                     borderColor: '#1DB954',
-                    tension: 0.4, // Smooth curve
-                    pointRadius: 0, // Hide points for cleaner look unless hovered? 
-                    pointHoverRadius: 4,
+                    tension: 0.4,
+                    pointRadius: 2, // Show small dots for each point
+                    pointHoverRadius: 5,
                     borderWidth: 2,
                 },
             ],
         };
-    }, [dataPoints]);
+    }, [dataPoints, dataPoints.length]); // Include length to detect array changes
 
     const options = {
         responsive: true,
         maintainAspectRatio: false,
+        animation: {
+            duration: 300,
+            easing: 'easeInOutQuart' as const,
+        },
+        transitions: {
+            active: {
+                animation: {
+                    duration: 200
+                }
+            }
+        },
         plugins: {
             legend: {
                 display: false,

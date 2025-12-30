@@ -36,6 +36,7 @@ interface RingRecord {
   spo2_max: number | null;
   spo2_min: number | null;
   spo2_diff: number | null;
+  hr: number | null;  // Calculated heart rate from PPG
   meta: any | null;
 }
 
@@ -100,6 +101,9 @@ const BATTERY_CMD = createCommand('03');
 const SET_UNITS_METRICS = createCommand('0a0200');
 const ENABLE_RAW_SENSOR_CMD = createCommand('a104');
 const DISABLE_RAW_SENSOR_CMD = createCommand('a102');
+
+// Note: Real-time HR commands (0x69, 0x6a, 0x1e) removed - proved unreliable
+// HR is now calculated by backend from PPG data
 
 // --- Helpers for conversions and debugging ---
 const toBase64 = (bytes: Uint8Array): string => {
@@ -231,11 +235,12 @@ export const useRingDataCollector = () => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [data, setData] = useState<any[]>([]);
   const [isCollecting, setIsCollecting] = useState(false);
+  const [isPeriodicRunning, setIsPeriodicRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Batching config
-  const UPLOAD_BATCH_SIZE = 50;
+  // Batching config - smaller batches = faster HR chart updates
+  const UPLOAD_BATCH_SIZE = 5;  // ~2 seconds of data at 3 samples/sec for frequent chart updates
   // using this for testing first
-  const API_BASE = "http://localhost:8000";
+  const API_BASE = "http://192.168.1.9:8000";
   const API_TOKEN = "";
   const uploadBufferRef = useRef<any[]>([]);
   const isUploadingRef = useRef(false);
@@ -262,6 +267,14 @@ export const useRingDataCollector = () => {
   useEffect(() => { deviceIdRef.current = deviceId; }, [deviceId]);
 
   const isDeviceConnectedRef = useRef(false);
+
+  // HR state - populated by backend calculation from PPG data
+  const [currentHR, setCurrentHR] = useState<number | null>(null);
+  // HR history for charting - array of {timestamp, hr} for last N readings
+  const [hrHistory, setHrHistory] = useState<Array<{ timestamp: string; hr: number }>>([]);
+  // PPG history for waveform chart - array of {timestamp, ppg} for raw signal display
+  const [ppgHistory, setPpgHistory] = useState<Array<{ timestamp: number; ppg: number }>>([]);
+
 
   const initialize = useCallback(async () => {
     try {
@@ -372,10 +385,45 @@ export const useRingDataCollector = () => {
         console.warn('Batch upload server error', res.status, txt);
         return false;
       }
+
+      // Read HR from backend response
+      const responseData = await res.json();
+      if (responseData.hr && responseData.hr > 0) {
+        console.log('[HR] Backend calculated HR:', responseData.hr.toFixed(1), 'BPM');
+        const roundedHR = Math.round(responseData.hr);
+        setCurrentHR(roundedHR);
+
+        // Apply HR retroactively to recent data entries (so cards show BPM)
+        setData(prev => {
+          const updated = [...prev];
+          // Update last N entries that don't have HR with the calculated value
+          const entriesToUpdate = Math.min(records.length, updated.length);
+          for (let i = 0; i < entriesToUpdate; i++) {
+            const idx = updated.length - 1 - i;
+            if (idx >= 0 && !updated[idx].hr) {
+              updated[idx] = { ...updated[idx], hr: roundedHR };
+            }
+          }
+          return updated;
+        });
+
+        // Add to HR history for chart
+        setHrHistory(prev => {
+          const newPoint = { timestamp: new Date().toISOString(), hr: roundedHR };
+          const updated = [...prev, newPoint];
+          console.log('[HR Chart] Added point, total:', updated.length, 'Latest:', roundedHR);
+          // Keep last 60 points
+          if (updated.length > 60) return updated.slice(-60);
+          return updated;
+        });
+      } else {
+        console.log('[HR] Backend returned HR:', responseData.hr, '(skipped)');
+      }
+
       console.log('Batch uploaded:', records.length);
       return true;
     } catch (e) {
-      console.warn("Batch upload failed bruh:", e);
+      console.warn("Batch upload failed:", e);
       return false;
     }
   }
@@ -405,7 +453,21 @@ export const useRingDataCollector = () => {
   };
 
   const commitRecord = (record: RingRecord) => {
+    // Note: HR is calculated by backend from PPG data
+    // and returned in batch upload response - no frontend calculation needed
     enqueueRecord(record);
+
+    // Add PPG to history for waveform display
+    if (record.ppg !== null && record.ppg > 0) {
+      setPpgHistory(prev => {
+        const newPoint = { timestamp: record.timestamp, ppg: record.ppg! };
+        const updated = [...prev, newPoint];
+        // Keep last 120 points for detailed waveform
+        if (updated.length > 120) return updated.slice(-120);
+        return updated;
+      });
+    }
+
     flushIfNeeded().catch(console.error);
   };
 
@@ -417,6 +479,7 @@ export const useRingDataCollector = () => {
       accX: null, accY: null, accZ: null,
       ppg: null, ppg_max: null, ppg_min: null, ppg_diff: null,
       spo2: null, spo2_max: null, spo2_min: null, spo2_diff: null,
+      hr: null,
       meta: null
     };
   };
@@ -489,8 +552,97 @@ export const useRingDataCollector = () => {
       // Note: We do NOT commit here. We wait for the next packet or stop command to commit.
       // This allows SpO2, PPG, and Accel arriving within 150ms to populate the same object.
 
+    } else if (bytes[0] === 0x1e) {
+      // Real-time HR response packet (Command 30 / 0x1e)
+      // Response: { commandId=30, heartRate=byte[1] }
+      const hexDump = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      console.log('[HR 0x1E] Packet:', hexDump);
+
+      const hrValue = bytes[1];
+
+      if (hrValue > 0 && hrValue < 250) {
+        console.log('[HR 0x1E] ✓ HR from ring:', hrValue, 'BPM');
+        setCurrentHR(hrValue);
+
+        // Update the pending record with HR if exists
+        if (pendingRecordRef.current) {
+          pendingRecordRef.current.hr = hrValue;
+        }
+      } else {
+        console.log('[HR 0x1E] Value:', hrValue, '(invalid or zero)');
+      }
+    } else if (bytes[0] === 0x69) {
+      // Data Request response (Command 105 / 0x69)
+      // Based on colmi_r02_client: byte[1]=readingType, byte[2]=errorCode, byte[3]=value
+      const readingType = bytes[1];
+      const errorCode = bytes[2];
+      const hrValue = bytes[3];
+
+      // Always log 0x69 packets for debugging
+      const hexDump = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      console.log('[HR 0x69] Packet:', hexDump, '| Type:', readingType, '| Error:', errorCode, '| Value:', hrValue);
+
+      if (readingType === 1) { // Heart Rate reading type
+        if (errorCode === 0 && hrValue > 0 && hrValue < 250) {
+          console.log('[HR 0x69] ✓ Valid HR from ring:', hrValue, 'BPM');
+          setCurrentHR(hrValue);
+
+          if (pendingRecordRef.current) {
+            pendingRecordRef.current.hr = hrValue;
+          }
+        } else if (errorCode !== 0) {
+          // Error codes: 1=no finger detected, 2=measuring, etc.
+          console.warn('[HR 0x69] Error code:', errorCode, '(1=no finger, 2=measuring)');
+        } else if (hrValue === 0) {
+          console.log('[HR 0x69] Still measuring... (value=0)');
+        }
+      }
+    } else if (bytes[0] === 0x6a) {
+      // Stop Data Request response - log full packet
+      const hexDump = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      console.log('[BLE] 0x6a (stop) response:', hexDump);
+    } else if (bytes[0] === 0x73) {
+      // Device Notify packet (ID: 115 = 0x73)
+      // When byte[1] = 0x12, byte[4] contains HR value
+      const notifyType = bytes[1];
+      const hexDump = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+
+      console.log('[0x73] Device Notify | Type:', '0x' + notifyType.toString(16), '| Full:', hexDump);
+
+      if (notifyType === 0x12) {
+        // Real-time HR notification - HR is in byte[4]
+        const hrValue = bytes[4];
+
+        if (hrValue > 30 && hrValue < 250) {
+          console.log('[0x73] ✓ HR from Device Notify:', hrValue, 'BPM');
+          setCurrentHR(hrValue);
+
+          // Update the pending record with HR if exists
+          if (pendingRecordRef.current) {
+            pendingRecordRef.current.hr = hrValue;
+          }
+        } else {
+          console.log('[0x73] Type 0x12 but HR value invalid:', hrValue);
+        }
+      } else if (notifyType === 0x01) {
+        // Type 0x01 is usually just an acknowledgment, no HR data
+        console.log('[0x73] Type 0x01 = acknowledgment (no HR data)');
+      } else {
+        console.log('[0x73] Unknown notify type:', '0x' + notifyType.toString(16));
+      }
+    } else if (bytes[0] === 0x16) {
+      // HR Settings response (command 22 / 0x16)
+      // byte[2] = enabled (1=enabled, 2=disabled)
+      // byte[3] = interval in minutes
+      const enabled = bytes[2] === 1;
+      const interval = bytes[3];
+      console.log('[HR Settings] Periodic HR logging:', enabled ? 'ENABLED' : 'DISABLED', 'Interval:', interval, 'min');
     } else {
-      console.warn('Unknown packet header:', bytes[0]);
+      // Only log if it's not a common packet
+      if (bytes[0] !== 0x03 && bytes[0] !== 0x0a) { // 0x03=battery, 0x0a=units response
+        const hexDump = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        console.log('[BLE] Unknown packet:', bytes[0].toString(16), 'hex:', hexDump);
+      }
     }
   };
 
@@ -578,8 +730,11 @@ export const useRingDataCollector = () => {
         console.info('Sending commands...');
         await writeCommand(deviceId, RXTX_SERVICE_UUID, RXTX_WRITE_UUID, BATTERY_CMD);
         await writeCommand(deviceId, RXTX_SERVICE_UUID, RXTX_WRITE_UUID, SET_UNITS_METRICS);
+
         await writeCommand(deviceId, RXTX_SERVICE_UUID, RXTX_WRITE_UUID, ENABLE_RAW_SENSOR_CMD);
-        console.info('Commands sent');
+        console.info('Commands sent (raw sensor enabled)');
+
+        // Note: HR is calculated by backend from PPG data - no ring HR commands needed
 
         // Auto-stop after duration (store timer so we can cancel if needed)
         if (collectionTimeoutRef.current) {
@@ -736,6 +891,7 @@ export const useRingDataCollector = () => {
         return;
       }
       periodicRunningRef.current = true;
+      setIsPeriodicRunning(true);
 
       // Start foreground service ONCE for the entire periodic session
       await ensureForegroundServiceStarted({
@@ -794,6 +950,7 @@ export const useRingDataCollector = () => {
     }
 
     periodicRunningRef.current = false;
+    setIsPeriodicRunning(false);
     if (periodicTimerRef.current !== null) {
       clearInterval(periodicTimerRef.current);
       periodicTimerRef.current = null;
@@ -851,6 +1008,10 @@ export const useRingDataCollector = () => {
     startPeriodicCollection,
     stopPeriodicCollection,
     isCollecting,
+    isPeriodicRunning,
+    currentHR,
+    hrHistory,
+    ppgHistory,
     data,
     error,
     deviceId,
