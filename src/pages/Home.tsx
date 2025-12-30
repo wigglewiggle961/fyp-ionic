@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   IonContent, IonPage, IonCard, IonGrid, IonRow, IonCol,
   IonIcon, IonHeader, IonToolbar, IonTitle, IonSelect, IonSelectOption,
   IonSpinner, IonRefresher, IonRefresherContent
 } from '@ionic/react';
-import { moon, sparkles, analytics, trendingUp, informationCircleOutline } from 'ionicons/icons';
+import { moon, sparkles, analytics, trendingUp } from 'ionicons/icons';
 import { useRingData } from '../services/RingDataProvider';
-import { SleepAPI, Session, SessionDetail } from '../services/SleepAPI';
+import { SleepAPI, Session, SessionDetail, FeatureExplanation } from '../services/SleepAPI';
 import HypnogramChart from '../components/HypnogramChart';
 import SleepStageDonut, { StageLabels } from '../components/SleepStageDonut';
-import FeatureExplainer from '../components/FeatureExplainer';
+import PredictionExplainer from '../components/PredictionExplainer';
 
 const Home: React.FC = () => {
   const { deviceId } = useRingData();
@@ -262,18 +262,69 @@ const Home: React.FC = () => {
                 <HypnogramChart predictions={sessionDetail.predictions} />
               </IonCard>
 
-              {/* Feature Explainability */}
-              <IonCard style={{
-                background: '#1a1a1a',
-                padding: 20,
-                borderRadius: 20,
-                margin: '0 0 16px'
-              }}>
-                <FeatureExplainer
-                  features={sessionDetail.feature_explanations}
-                  title="How AI Analyzes Your Sleep"
-                />
-              </IonCard>
+              {/* Feature Explainability - uses aggregated SHAP from all predictions */}
+              {(() => {
+                // Aggregate SHAP contributions from all predictions
+                const aggregatedShap: Record<string, number> = {};
+                let shapCount = 0;
+                sessionDetail.predictions.forEach((p, idx) => {
+                  let contributions = p.shap_contributions;
+
+                  // Handle case where it arrives as a string (JSON)
+                  if (typeof contributions === 'string') {
+                    try {
+                      contributions = JSON.parse(contributions);
+                    } catch (e) {
+                      console.error('Failed to parse SHAP JSON:', e);
+                      contributions = {};
+                    }
+                  }
+
+                  if (contributions && typeof contributions === 'object') {
+                    shapCount++;
+                    Object.entries(contributions).forEach(([key, val]) => {
+                      // Ensure val is a number
+                      const numVal = typeof val === 'number' ? val : parseFloat(val as string);
+                      if (!isNaN(numVal)) {
+                        aggregatedShap[key] = (aggregatedShap[key] || 0) + numVal;
+                      }
+                    });
+                  }
+                });
+                // Average the values
+                if (shapCount > 0) {
+                  Object.keys(aggregatedShap).forEach(k => {
+                    aggregatedShap[k] = aggregatedShap[k] / shapCount;
+                  });
+                }
+
+                // Build feature dictionary from session data
+                const featureDict: Record<string, any> = {};
+                sessionDetail.feature_explanations?.forEach(f => {
+                  featureDict[f.key] = f;
+                });
+
+                // Sort and take top 5
+                const top5 = Object.entries(aggregatedShap)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 5)
+                  .reduce((acc, [k, v]) => ({ ...acc, [k]: v }), {});
+
+                return Object.keys(top5).length > 0 ? (
+                  <IonCard style={{
+                    background: '#1a1a1a',
+                    padding: 20,
+                    borderRadius: 20,
+                    margin: '0 0 16px'
+                  }}>
+                    <PredictionExplainer
+                      stageLabel="Session Analysis"
+                      shapContributions={top5}
+                      featureDict={featureDict}
+                    />
+                  </IonCard>
+                ) : null;
+              })()}
 
               {/* Stats Grid */}
               <IonGrid style={{ padding: 0, margin: '0 0 16px' }}>

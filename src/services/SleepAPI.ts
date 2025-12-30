@@ -41,9 +41,9 @@ export interface Prediction {
 
 export interface FeatureExplanation {
     key: string;
-    importance: number;
     name: string;
     desc: string;
+    category: string;
 }
 
 export interface SessionDetail {

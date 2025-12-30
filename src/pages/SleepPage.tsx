@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { KeepAwake } from '@capacitor-community/keep-awake';
 import {
     IonContent, IonPage, IonHeader, IonToolbar, IonTitle,
     IonIcon, IonButton,
@@ -16,6 +17,31 @@ import HeartRateChart from '../components/HeartRateChart';
 import PPGWaveformChart from '../components/PPGWaveformChart';
 
 const SleepPage: React.FC = () => {
+    // Keep screen on while this page is active
+    useEffect(() => {
+        const keepOn = async () => {
+            try {
+                await KeepAwake.keepAwake();
+                console.log('Screen keep-awake enabled');
+            } catch (error) {
+                console.error('Error enabling keep-awake:', error);
+            }
+        };
+        keepOn();
+
+        return () => {
+            const allowSleep = async () => {
+                try {
+                    await KeepAwake.allowSleep();
+                    console.log('Screen keep-awake disabled');
+                } catch (error) {
+                    console.error('Error disabling keep-awake:', error);
+                }
+            };
+            allowSleep();
+        };
+    }, []);
+
     const {
         scanAndConnect, startDataCollection, stopDataCollection,
         startPeriodicCollection, stopPeriodicCollection,
