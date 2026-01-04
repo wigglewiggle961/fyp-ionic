@@ -4,15 +4,16 @@ import {
     IonContent, IonPage, IonHeader, IonToolbar, IonTitle,
     IonIcon, IonButton,
     IonToggle, IonItem, IonLabel, IonButtons,
-    IonCard, IonGrid, IonRow, IonCol, IonText
+    IonCard, IonGrid, IonRow, IonCol, IonText, IonChip
 } from '@ionic/react';
 import {
     heart, bluetooth,
     playCircleOutline, stopCircleOutline, listOutline,
-    waterOutline, pulse, speedometer, analytics
+    waterOutline, pulse, speedometer, analytics, flashOutline
 } from 'ionicons/icons';
 import './SleepPage.css';
 import { useRingData } from '../services/RingDataProvider';
+import { SleepAPI } from '../services/SleepAPI';
 import HeartRateChart from '../components/HeartRateChart';
 import PPGWaveformChart from '../components/PPGWaveformChart';
 
@@ -44,12 +45,26 @@ const SleepPage: React.FC = () => {
 
     const {
         scanAndConnect, startDataCollection, stopDataCollection,
-        startPeriodicCollection, stopPeriodicCollection,
+        startPeriodicCollection, stopPeriodicCollection, disconnectDevice,
         isCollecting, isPeriodicRunning, currentHR, hrHistory, ppgHistory, data,
         error, deviceId
     } = useRingData();
 
     const [isScientific, setIsScientific] = useState(false);
+    const [isDemoRunning, setIsDemoRunning] = useState(false);
+
+    // Toggle demo mode
+    const toggleDemoMode = async () => {
+        if (!deviceId) return;
+
+        if (isDemoRunning) {
+            await SleepAPI.stopDemo(deviceId);
+            setIsDemoRunning(false);
+        } else {
+            const success = await SleepAPI.startDemo(deviceId);
+            setIsDemoRunning(success);
+        }
+    };
 
     // Get latest reading or defaults
     const latest = data.length > 0 ? data[data.length - 1] : null;
@@ -95,6 +110,14 @@ const SleepPage: React.FC = () => {
                             </span>
                         </>
                     )}
+                    {isDemoRunning && (
+                        <>
+                            <span style={{ margin: '0 8px', color: '#333' }}>|</span>
+                            <span className="status-text" style={{ color: '#ff9500' }}>
+                                🎬 DEMO
+                            </span>
+                        </>
+                    )}
                 </div>
 
                 {error && (
@@ -126,7 +149,7 @@ const SleepPage: React.FC = () => {
                     <div className="secondary-metrics-row">
                         <div className="sec-metric">
                             <span className="sec-label">SpO2</span>
-                            <span className="sec-value" style={{ color: '#50c8ff' }}>{currentSpo2}%</span>
+                            <span className="sec-value" style={{ color: '#50c8ff' }}>{currentSpo2}</span>
                         </div>
                         <div className="sec-metric">
                             <span className="sec-label">Motion</span>
@@ -148,14 +171,27 @@ const SleepPage: React.FC = () => {
 
                 {/* CONTROLS */}
                 <div className="actions-container">
-                    <IonButton
-                        expand="block"
-                        className={`control-btn connect-btn ${deviceId ? 'connected-state' : ''}`}
-                        onClick={scanAndConnect}
-                        disabled={!!deviceId}
-                    >
-                        {deviceId ? 'Device Linked' : 'Scan & Connect Ring'}
-                    </IonButton>
+                    {deviceId ? (
+                        <IonButton
+                            expand="block"
+                            className="control-btn connect-btn connected-state"
+                            onClick={async () => {
+                                if (isPeriodicRunning) await stopPeriodicCollection();
+                                if (isCollecting) await stopDataCollection();
+                                await disconnectDevice();
+                            }}
+                        >
+                            Device Linked
+                        </IonButton>
+                    ) : (
+                        <IonButton
+                            expand="block"
+                            className="control-btn connect-btn"
+                            onClick={scanAndConnect}
+                        >
+                            Scan & Connect Ring
+                        </IonButton>
+                    )}
 
                     <div className="action-btn-row" style={{ marginTop: 12 }}>
                         <IonButton
@@ -200,6 +236,19 @@ const SleepPage: React.FC = () => {
                         <IonIcon icon={stopCircleOutline} style={{ marginRight: 8 }} />
                         Stop Session
                     </IonButton>
+
+                    {/* Demo Mode Button - for FYP presentations */}
+                    <IonButton
+                        expand="block"
+                        className="control-btn"
+                        color={isDemoRunning ? 'warning' : 'tertiary'}
+                        onClick={toggleDemoMode}
+                        disabled={!deviceId}
+                        style={{ marginTop: 8 }}
+                    >
+                        <IonIcon icon={flashOutline} style={{ marginRight: 8 }} />
+                        {isDemoRunning ? '🎬 Stop Demo Mode' : '🎬 Demo Mode'}
+                    </IonButton>
                 </div>
 
                 {/* FEED SECTION */}
@@ -235,7 +284,7 @@ const SleepPage: React.FC = () => {
                                                     <IonIcon icon={pulse} style={{ color: '#50c8ff', fontSize: 16 }} />
                                                     <div>
                                                         <div style={{ fontSize: 11, color: '#888' }}>SpO2</div>
-                                                        <div style={{ fontWeight: 600, color: '#fff' }}>{entry.spo2 ? Math.round(entry.spo2 / 2) : '--'}%</div>
+                                                        <div style={{ fontWeight: 600, color: '#fff' }}>{entry.spo2 ? Math.round(entry.spo2 / 2) : '--'}</div>
                                                     </div>
                                                 </div>
                                             </IonCol>
@@ -279,7 +328,7 @@ const SleepPage: React.FC = () => {
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #333' }}>
                                             <span style={{ color: '#888' }}>OXYGEN</span>
-                                            <span style={{ color: '#0f0' }}>{entry.spo2 ? Math.round(entry.spo2 / 2) : 'NULL'} %</span>
+                                            <span style={{ color: '#0f0' }}>{entry.spo2 ? Math.round(entry.spo2 / 2) : 'NULL'}</span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #333' }}>
                                             <span style={{ color: '#888' }}>ACCEL_X</span>

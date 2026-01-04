@@ -91,5 +91,50 @@ export const SleepAPI = {
             console.error('Failed to fetch features:', error);
             return [];
         }
+    },
+
+    async getLatestPrediction(deviceId: string): Promise<Prediction | null> {
+        try {
+            const res = await fetch(`${API_BASE}/predictions/${deviceId}/latest`);
+            const data = await res.json();
+            return data.prediction || null;
+        } catch (error) {
+            console.error('Failed to fetch latest prediction:', error);
+            return null;
+        }
+    },
+
+    // Demo mode controls
+    async startDemo(deviceId: string): Promise<boolean> {
+        try {
+            const res = await fetch(`${API_BASE}/demo/start/${deviceId}`, { method: 'POST' });
+            const data = await res.json();
+            return data.status === 'ok';
+        } catch (error) {
+            console.error('Failed to start demo:', error);
+            return false;
+        }
+    },
+
+    async stopDemo(deviceId: string): Promise<boolean> {
+        try {
+            const res = await fetch(`${API_BASE}/demo/stop/${deviceId}`, { method: 'POST' });
+            const data = await res.json();
+            return data.status === 'ok';
+        } catch (error) {
+            console.error('Failed to stop demo:', error);
+            return false;
+        }
+    },
+
+    async getDemoStatus(deviceId: string): Promise<boolean> {
+        try {
+            const res = await fetch(`${API_BASE}/demo/status/${deviceId}`);
+            const data = await res.json();
+            return data.demo_running || false;
+        } catch (error) {
+            console.error('Failed to get demo status:', error);
+            return false;
+        }
     }
 };
