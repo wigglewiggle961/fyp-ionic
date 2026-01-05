@@ -1,5 +1,6 @@
 import { LocalNotifications, ScheduleOptions } from '@capacitor/local-notifications';
 import { getSleepStageMonitor } from './SleepStageMonitor';
+import { getHapticsService } from './HapticsService';
 
 export class AlarmService {
   // Smart alarm state
@@ -10,6 +11,7 @@ export class AlarmService {
   constructor() {
     this.initializeChannels();
     this.registerActions();
+    this.setupNotificationListeners();
   }
 
   async registerActions() {
@@ -54,15 +56,15 @@ export class AlarmService {
       vibration: true
     });
 
-    // Channel for Song 3 (Birds)
+    // Channel for Silent (Haptics only)
     await LocalNotifications.createChannel({
-      id: 'alarm_channel_song_3_v2',
-      name: 'Alarm - Song 3',
-      description: 'Wake up to Birds',
+      id: 'alarm_channel_silent_v2',
+      name: 'Alarm - Silent',
+      description: 'Wake up with vibration only (no sound)',
       importance: 5,
       visibility: 1,
-      sound: 'alarm3', // Assuming 'alarm3.wav/mp3' exists in res/raw, otherwise fallbacks to default
-      vibration: true
+      sound: '', // No sound - uses haptics instead
+      vibration: false // We handle vibration via HapticsService
     });
 
   }
@@ -71,13 +73,52 @@ export class AlarmService {
   private getChannelId(soundChoice: number): string {
     switch (soundChoice) {
       case 2: return 'alarm_channel_song_2_v2';
-      case 3: return 'alarm_channel_song_3_v2';
+      case 3: return 'alarm_channel_silent_v2'; // Silent option with haptics
       default: return 'alarm_channel_song_1_v2';
     }
   }
 
+  // Helper to check if sound choice is silent (haptics only)
+  private isSilentMode(soundChoice: number): boolean {
+    return soundChoice === 3;
+  }
+
+  /**
+   * Set up global notification listeners for all alarm types.
+   * This handles the STOP ALARM action and cancels pending notifications.
+   */
+  private setupNotificationListeners(): void {
+    // Listen for when user taps the notification or presses action button
+    LocalNotifications.addListener('localNotificationActionPerformed', async (action) => {
+      console.log('[AlarmService] Notification action performed:', action.actionId);
+
+      // Stop haptics if active
+      const hapticsService = getHapticsService();
+      hapticsService.stop();
+
+      // Cancel all pending notifications and reset state
+      await this.cancelAll();
+    });
+  }
+
+  /**
+   * Set up listener to start haptic vibration when silent alarm notification fires.
+   */
+  private setupSilentAlarmListener(): void {
+    // Listen for when the notification fires
+    LocalNotifications.addListener('localNotificationReceived', async (notification) => {
+      console.log('[AlarmService] Notification received:', notification.id);
+
+      // Start continuous haptic vibration for silent alarm
+      if (this.isSilentMode(this.currentSoundChoice)) {
+        const hapticsService = getHapticsService();
+        await hapticsService.startContinuousVibration();
+      }
+    });
+  }
+
   // 2. Schedule the Alarm (basic, non-smart)
-  // soundChoice: 1 (Song 1), 2 (Song 2), 3 (Birds)
+  // soundChoice: 1 (Song 1), 2 (Song 2), 3 (Silent)
   async setAlarm(triggerDate: Date, soundChoice: number) {
     await this.initializeChannels();
 
@@ -103,6 +144,15 @@ export class AlarmService {
     try {
       await LocalNotifications.schedule(options);
       console.log(`Alarm set for ${triggerDate} on channel ${selectedChannelId}`);
+
+      // Store sound choice for use when notification fires
+      this.currentSoundChoice = soundChoice;
+
+      // If silent mode, set up listener to start haptics when notification fires
+      if (this.isSilentMode(soundChoice)) {
+        this.setupSilentAlarmListener();
+      }
+
       return true;
     } catch (e) {
       console.error('Error scheduling alarm', e);
@@ -256,6 +306,10 @@ export class AlarmService {
     if (pending.notifications.length > 0) {
       await LocalNotifications.cancel(pending);
     }
+
+    // Stop haptic vibration if active
+    const hapticsService = getHapticsService();
+    hapticsService.stop();
 
     // Also stop sleep stage monitoring
     const monitor = getSleepStageMonitor();

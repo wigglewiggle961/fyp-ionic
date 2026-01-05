@@ -11,6 +11,7 @@ import {
     bluetoothOutline, warningOutline, moonOutline
 } from 'ionicons/icons';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { App } from '@capacitor/app';
 import { AlarmService } from '../services/AlarmService';
 import { useRingData } from '../services/RingDataProvider';
 import './AlarmPage.css';
@@ -47,6 +48,32 @@ const AlarmPage: React.FC = () => {
     useIonViewWillEnter(() => {
         checkAlarmStatus();
     });
+
+    // Listen for app resume and notification actions to update UI
+    useEffect(() => {
+        // Check when app comes back to foreground
+        const appStateListener = App.addListener('appStateChange', (state) => {
+            if (state.isActive) {
+                checkAlarmStatus();
+            }
+        });
+
+        // Check when notification action is performed (e.g., STOP ALARM pressed)
+        const notificationActionListener = LocalNotifications.addListener(
+            'localNotificationActionPerformed',
+            () => {
+                // Small delay to ensure cancelAll() has completed
+                setTimeout(() => {
+                    checkAlarmStatus();
+                }, 100);
+            }
+        );
+
+        return () => {
+            appStateListener.then(l => l.remove());
+            notificationActionListener.then(l => l.remove());
+        };
+    }, [checkAlarmStatus]);
 
     // Helper to format time for display (e.g. "07:30")
     const formatTimeDisplay = (isoString: string) => {
@@ -179,7 +206,7 @@ const AlarmPage: React.FC = () => {
                         </IonChip>
                     )}
                     {isAlarmActive && (
-                        <IonChip color="primary" style={{ '--background': 'rgba(88, 166, 255, 0.15)' }}>
+                        <IonChip style={{ '--background': 'rgba(88, 166, 255, 0.15)' }}>
                             <IonIcon icon={moonOutline} />
                             <IonLabel>Alarm Active</IonLabel>
                         </IonChip>
@@ -248,9 +275,9 @@ const AlarmPage: React.FC = () => {
                         <span className="control-label">Alarm Sound</span>
 
                         {[
-                            { id: 1, name: 'Snowy (Default)' },
-                            { id: 2, name: 'Energize' },
-                            { id: 3, name: 'Morning Birds' }
+                            { id: 1, name: 'Snowy (Default)', isSilent: false },
+                            { id: 2, name: 'Energize', isSilent: false },
+                            { id: 3, name: 'Silent (Vibrate)', isSilent: true }
                         ].map(sound => (
                             <div
                                 key={sound.id}
