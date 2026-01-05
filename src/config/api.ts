@@ -1,10 +1,10 @@
 // API Configuration - Change URL here to switch between dev and demo
 // ============================================================================
 
-// Local development URL (your home network)
+// Local development URL
 const LOCAL_API = "http://192.168.1.9:8000";
 
-// Cloudflare Tunnel URL (for demo/presentation outside home)
+// Cloudflare Tunnel URL
 const TUNNEL_API = "https://pontiac-relationship-citizenship-returns.trycloudflare.com";
 
 // ============================================================================
