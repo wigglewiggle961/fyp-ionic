@@ -23,14 +23,14 @@ interface HypnogramProps {
 
 const STAGE_COLORS: Record<number, string> = {
     0: '#ff6b6b',  // Wake - red
-    1: '#a855f7',  // REM - purple
+    5: '#a855f7',  // REM - purple (stage code 5)
     2: '#3b82f6',  // Light - blue
     3: '#22c55e',  // Deep - green
 };
 
 const STAGE_LABELS: Record<number, string> = {
     0: 'Wake',
-    1: 'REM',
+    5: 'REM',
     2: 'Light',
     3: 'Deep',
 };
@@ -51,9 +51,10 @@ const HypnogramChart: React.FC<HypnogramProps> = ({ predictions }) => {
     }
 
     // Convert stages to inverted values for display (Deep at bottom, Wake at top)
+    // Stage codes from backend: 0=Wake, 2=Light, 3=Deep, 5=REM
     const stageToY: Record<number, number> = {
         0: 3,  // Wake at top
-        1: 2,  // REM
+        5: 2,  // REM (stage code 5)
         2: 1,  // Light
         3: 0,  // Deep at bottom
     };
@@ -74,8 +75,13 @@ const HypnogramChart: React.FC<HypnogramProps> = ({ predictions }) => {
             backgroundColor: 'rgba(29, 185, 84, 0.1)',
             fill: true,
             tension: 0.3,
-            pointRadius: 0,
-            borderWidth: 2,
+            pointRadius: 0,           // No visible points
+            pointHitRadius: 20,       // Large touch area for mobile
+            pointHoverRadius: 6,      // Show point when hovering/touching
+            pointHoverBackgroundColor: '#1DB954',
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2,
+            borderWidth: 3,           // Slightly thicker line
         }],
     };
 
@@ -87,7 +93,9 @@ const HypnogramChart: React.FC<HypnogramProps> = ({ predictions }) => {
             tooltip: {
                 callbacks: {
                     label: (context: any) => {
-                        const stageNum = 3 - context.raw;  // Reverse the mapping
+                        // Map Y-value back to stage code: 3=Wake, 2=REM, 1=Light, 0=Deep
+                        const yToStage: Record<number, number> = { 3: 0, 2: 5, 1: 2, 0: 3 };
+                        const stageNum = yToStage[context.raw] ?? 0;
                         return STAGE_LABELS[stageNum] || 'Unknown';
                     }
                 }
@@ -116,7 +124,9 @@ const HypnogramChart: React.FC<HypnogramProps> = ({ predictions }) => {
                     font: { size: 10 },
                     stepSize: 1,
                     callback: function (value: number) {
-                        const stageNum = 3 - value;
+                        // Map Y-value back to stage code: 3=Wake, 2=REM, 1=Light, 0=Deep
+                        const yToStage: Record<number, number> = { 3: 0, 2: 5, 1: 2, 0: 3 };
+                        const stageNum = yToStage[value] ?? -1;
                         return STAGE_LABELS[stageNum] || '';
                     }
                 }

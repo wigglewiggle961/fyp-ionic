@@ -70,7 +70,14 @@ const SleepPage: React.FC = () => {
     const latest = data.length > 0 ? data[data.length - 1] : null;
     // Use currentHR from the HR calculator for live display
     const displayHR = currentHR || latest?.hr || '--';
-    const currentSpo2 = latest?.spo2 ? Math.round(latest.spo2 / 2) : '--';
+
+    // Find last known SpO2 from recent data (SpO2 packets arrive less frequently)
+    const lastKnownSpo2 = (() => {
+        for (let i = data.length - 1; i >= Math.max(0, data.length - 10); i--) {
+            if (data[i]?.spo2) return Math.round(data[i].spo2);
+        }
+        return '--';
+    })();
 
     // Simple activity heuristic
     const isMoving = latest ? (Math.abs(latest.accX) > 1.2 || Math.abs(latest.accY) > 1.2) : false;
@@ -149,7 +156,7 @@ const SleepPage: React.FC = () => {
                     <div className="secondary-metrics-row">
                         <div className="sec-metric">
                             <span className="sec-label">SpO2</span>
-                            <span className="sec-value" style={{ color: '#50c8ff' }}>{currentSpo2}</span>
+                            <span className="sec-value" style={{ color: '#50c8ff' }}>{lastKnownSpo2}</span>
                         </div>
                         <div className="sec-metric">
                             <span className="sec-label">Motion</span>
@@ -284,7 +291,7 @@ const SleepPage: React.FC = () => {
                                                     <IonIcon icon={pulse} style={{ color: '#50c8ff', fontSize: 16 }} />
                                                     <div>
                                                         <div style={{ fontSize: 11, color: '#888' }}>SpO2</div>
-                                                        <div style={{ fontWeight: 600, color: '#fff' }}>{entry.spo2 ? Math.round(entry.spo2 / 2) : '--'}</div>
+                                                        <div style={{ fontWeight: 600, color: '#fff' }}>{entry.spo2 ? Math.round(entry.spo2) : '--'}</div>
                                                     </div>
                                                 </div>
                                             </IonCol>
@@ -328,7 +335,7 @@ const SleepPage: React.FC = () => {
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #333' }}>
                                             <span style={{ color: '#888' }}>OXYGEN</span>
-                                            <span style={{ color: '#0f0' }}>{entry.spo2 ? Math.round(entry.spo2 / 2) : 'NULL'}</span>
+                                            <span style={{ color: '#0f0' }}>{entry.spo2 ? Math.round(entry.spo2) : 'NULL'}</span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #333' }}>
                                             <span style={{ color: '#888' }}>ACCEL_X</span>

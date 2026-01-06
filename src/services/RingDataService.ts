@@ -275,6 +275,15 @@ export const useRingDataCollector = () => {
   // PPG history for waveform chart - array of {timestamp, ppg} for raw signal display
   const [ppgHistory, setPpgHistory] = useState<Array<{ timestamp: number; ppg: number }>>([]);
 
+  // Auto-reconnect state
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const lastKnownDeviceIdRef = useRef<string | null>(null);
+  const manualDisconnectRef = useRef(false); // True if user manually disconnected
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const MAX_RECONNECT_ATTEMPTS = 5;
+  const RECONNECT_BASE_DELAY_MS = 2000; // Start with 2s, exponential backoff
+
 
   const initialize = useCallback(async () => {
     try {
@@ -290,10 +299,114 @@ export const useRingDataCollector = () => {
     initialize();
   }, [initialize]);
 
+  // Auto-reconnect function - attempts to reconnect to last known device
+  const attemptReconnect = useCallback(async () => {
+    const targetDeviceId = lastKnownDeviceIdRef.current;
+
+    if (!targetDeviceId) {
+      console.info('[AutoReconnect] No device ID to reconnect to');
+      setIsReconnecting(false);
+      return;
+    }
+
+    if (manualDisconnectRef.current) {
+      console.info('[AutoReconnect] Skipping - user manually disconnected');
+      setIsReconnecting(false);
+      return;
+    }
+
+    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      console.warn('[AutoReconnect] Max attempts reached, giving up');
+      setIsReconnecting(false);
+      setError('Connection lost. Please reconnect manually.');
+      // Reset for next time
+      reconnectAttemptsRef.current = 0;
+      lastKnownDeviceIdRef.current = null;
+      return;
+    }
+
+    reconnectAttemptsRef.current += 1;
+    const attempt = reconnectAttemptsRef.current;
+
+    // Calculate delay with exponential backoff (2s, 4s, 8s, 16s, 30s max)
+    const delay = Math.min(
+      RECONNECT_BASE_DELAY_MS * Math.pow(2, attempt - 1),
+      30000
+    );
+
+    console.info(`[AutoReconnect] Attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms...`);
+    setIsReconnecting(true);
+
+    // Wait before attempting
+    await new Promise(resolve => setTimeout(resolve, delay));
+
+    // Check again if we should still reconnect (user might have manually disconnected)
+    if (manualDisconnectRef.current) {
+      console.info('[AutoReconnect] Cancelled - user manually disconnected during wait');
+      setIsReconnecting(false);
+      return;
+    }
+
+    try {
+      console.info(`[AutoReconnect] Connecting to ${targetDeviceId}...`);
+
+      await BluetoothLe.connect({
+        deviceId: targetDeviceId,
+        timeout: 15000, // 15s timeout for reconnect
+      });
+
+      // Success!
+      console.info('[AutoReconnect] Reconnected successfully!');
+      isDeviceConnectedRef.current = true;
+      setDeviceId(targetDeviceId);
+      setIsReconnecting(false);
+      setError(null);
+      reconnectAttemptsRef.current = 0;
+
+      // If we were collecting data, resume notifications
+      if (isCollectingRef.current || periodicRunningRef.current) {
+        console.info('[AutoReconnect] Resuming data collection...');
+        try {
+          await BluetoothLe.startNotifications({
+            deviceId: targetDeviceId,
+            service: RXTX_SERVICE_UUID,
+            characteristic: RXTX_NOTIFY_UUID
+          });
+          await BluetoothLe.startNotifications({
+            deviceId: targetDeviceId,
+            service: MAIN_SERVICE_UUID,
+            characteristic: MAIN_NOTIFY_UUID
+          });
+          await writeCommand(targetDeviceId, RXTX_SERVICE_UUID, RXTX_WRITE_UUID, ENABLE_RAW_SENSOR_CMD);
+          console.info('[AutoReconnect] Data collection resumed');
+        } catch (e) {
+          console.warn('[AutoReconnect] Failed to resume notifications:', e);
+        }
+      }
+
+    } catch (err: any) {
+      console.warn(`[AutoReconnect] Attempt ${attempt} failed:`, err?.message || err);
+
+      // Schedule next attempt if we haven't hit max
+      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS && !manualDisconnectRef.current) {
+        attemptReconnect();
+      } else {
+        setIsReconnecting(false);
+        if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          setError('Connection lost. Please reconnect manually.');
+        }
+      }
+    }
+  }, []);
+
   const scanAndConnect = useCallback(async () => {
     try {
       console.info('Starting manual scan...');
       setError(null);
+
+      // Reset manual disconnect flag since user is actively connecting
+      manualDisconnectRef.current = false;
+      reconnectAttemptsRef.current = 0;
 
       const isEnabled = await BluetoothLe.isEnabled();
       console.info('Bluetooth enabled:', isEnabled);
@@ -327,13 +440,22 @@ export const useRingDataCollector = () => {
         timeout: 20000, // 20s
       });
 
+      // Store device ID for auto-reconnect
+      lastKnownDeviceIdRef.current = ring.deviceId;
+
       BluetoothLe.addListener('onDisconnect', (info: any) => {
         if (info?.deviceId === ring.deviceId) {
-          console.info('Device disconnected:', info.deviceId);
+          console.info('[BLE] Device disconnected:', info.deviceId);
           isDeviceConnectedRef.current = false;
           listenersAddedRef.current = false;
           setIsCollecting(false);
           setDeviceId(null);
+
+          // Trigger auto-reconnect if not manually disconnected
+          if (!manualDisconnectRef.current && lastKnownDeviceIdRef.current) {
+            console.info('[AutoReconnect] Unexpected disconnect, will attempt to reconnect...');
+            attemptReconnect();
+          }
         }
       });
 
@@ -346,7 +468,7 @@ export const useRingDataCollector = () => {
       setError(errorMsg);
       console.error('Full error:', err);
     }
-  }, []);
+  }, [attemptReconnect]);
 
   const sendBatchToServer = async (deviceIdForBatch: string | null, labelForBatch: string | null, records: any[]) => {
     if (!records || records.length === 0) return true;
@@ -824,6 +946,17 @@ export const useRingDataCollector = () => {
   const disconnectDevice = useCallback(async () => {
     console.log('disconnectDevice() called');
 
+    // Mark as manual disconnect to prevent auto-reconnect
+    manualDisconnectRef.current = true;
+
+    // Cancel any pending reconnect attempts
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    reconnectAttemptsRef.current = 0;
+    setIsReconnecting(false);
+
     try {
       // First stop any active collection
       if (isCollecting) {
@@ -846,7 +979,7 @@ export const useRingDataCollector = () => {
           await BluetoothLe.disconnect({ deviceId });
           isDeviceConnectedRef.current = false;
           listenersAddedRef.current = false; // Reset listeners flag
-          console.log('Device disconnected');
+          console.log('Device disconnected (manual)');
         } catch (e) {
           console.warn('Disconnect failed:', e);
         }
@@ -855,6 +988,7 @@ export const useRingDataCollector = () => {
       // Clear device state
       setDeviceId(null);
       setIsCollecting(false);
+      lastKnownDeviceIdRef.current = null; // Clear last known device
 
       // Ensure foreground service is stopped
       await ensureForegroundServiceStopped();
@@ -984,6 +1118,12 @@ export const useRingDataCollector = () => {
         collectionTimeoutRef.current = null;
       }
 
+      // Stop any pending reconnect
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+
       // Disconnect device (async, don't await)
       if (deviceIdRef.current && isDeviceConnectedRef.current) {
         (async () => {
@@ -1009,6 +1149,7 @@ export const useRingDataCollector = () => {
     stopPeriodicCollection,
     isCollecting,
     isPeriodicRunning,
+    isReconnecting,
     currentHR,
     hrHistory,
     ppgHistory,

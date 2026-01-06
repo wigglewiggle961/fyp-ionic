@@ -239,6 +239,15 @@ const Home: React.FC = () => {
                   light={summary.light_min}
                   deep={summary.deep_min}
                 />
+                <div style={{
+                  marginTop: 12,
+                  fontSize: 10,
+                  color: '#555',
+                  textAlign: 'center',
+                  fontStyle: 'italic'
+                }}>
+                  Recorded time from {summary.prediction_count} data points
+                </div>
               </IonCard>
 
               {/* Hypnogram */}
